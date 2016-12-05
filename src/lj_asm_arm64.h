@@ -262,8 +262,8 @@ static void asm_fusexref(ASMState *as, A64Ins ai, Reg rd, IRRef ref,
       } else {
         IRRef lref = ir->op1, rref = ir->op2;
         Reg rn, rm;
-        if (ai & 0x3c200800) { // LDRd and STRd
-          IRIns *irl = IR(ir->op1);
+        if (ai & 0x3c200800) {
+          IRIns *irl = IR(lref);
           if (irl->o == IR_BSHL && mayfuse(as, irl->op1) &&
               irref_isk(irl->op2)) {
             int shift = IR(irl->op2)->i & 31;
@@ -287,9 +287,19 @@ static void asm_fusexref(ASMState *as, A64Ins ai, Reg rd, IRRef ref,
       } else if (asm_isk32(as, ir->op1, &ofs)) {
 	ref = ir->op2;
       } else {
-	/* NYI: Fuse ADD with constant. - registers */
 	Reg rn = ra_alloc1(as, ir->op1, allow);
-	uint32_t m = asm_fuseopm(as, 0, ir->op2, rset_exclude(allow, rn));
+        IRIns *irr = IR(ir->op2);
+        int addprev = (irr+1 == ir);
+        uint32_t m;
+        if (addprev && irr->o == IR_ADD && !ra_used(irr)) {
+          if (irref_isk(irr->op2)) {
+            Reg rm = ra_alloc1(as, irr->op1, rset_exclude(allow, rn));
+	    emit_lso(as, ai, rd, rd, sizeof(GCstr) + IR(irr->op2)->i);
+	    emit_dnm(as, A64I_ADDx|A64F_EX(A64EX_SXTW), rd, rn, rm);
+            return;
+          }
+        }
+	m = asm_fuseopm(as, 0, ir->op2, rset_exclude(allow, rn));
 	emit_lso(as, ai, rd, rd, sizeof(GCstr));
 	emit_dn(as, A64I_ADDx^m, rd, rn);
 	return;
