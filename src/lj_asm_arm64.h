@@ -257,16 +257,37 @@ static void asm_fusexref(ASMState *as, A64Ins ai, Reg rd, IRRef ref,
   int32_t ofs = 0;
   if (ra_noreg(ir->r) && canfuse(as, ir)) {
     if (ir->o == IR_ADD) {
-      if (asm_isk32(as, ir->op2, &ofs) && emit_checkofs(ai, ofs))
+      if (asm_isk32(as, ir->op2, &ofs) && emit_checkofs(ai, ofs)) {
 	ref = ir->op1;
-      /* NYI: Fuse add with two registers. */
+      } else {
+        IRRef lref = ir->op1, rref = ir->op2;
+        Reg rn, rm;
+        if (ai & 0x3c200800) { // LDRd and STRd
+          IRIns *irl = IR(ir->op1);
+          if (irl->o == IR_BSHL && mayfuse(as, irl->op1) &&
+              irref_isk(irl->op2)) {
+            int shift = IR(irl->op2)->i & 31;
+            if (((ai & 0x80000000) && (shift == 2)) ||
+                ((ai & 0xc0000000) && (shift == 3))) {
+              rm = ra_alloc1(as, irl->op1, allow);
+              rn = ra_alloc1(as, rref, rset_exclude(allow, rm));
+              emit_dnm(as, (ai^A64I_LS_R)|A64I_LS_SXTXx|A64I_LS_SH, rd, rn, rm);
+              return;
+            }
+          }
+        }
+        rn = ra_alloc1(as, lref, allow);
+	rm = ra_alloc1(as, rref, rset_exclude(allow, rn));
+        emit_dnm(as, (ai^A64I_LS_R)|A64I_LS_SXTXx, rd, rn, rm);
+        return;
+      }
     } else if (ir->o == IR_STRREF) {
       if (asm_isk32(as, ir->op2, &ofs)) {
 	ref = ir->op1;
       } else if (asm_isk32(as, ir->op1, &ofs)) {
 	ref = ir->op2;
       } else {
-	/* NYI: Fuse ADD with constant. */
+	/* NYI: Fuse ADD with constant. - registers */
 	Reg rn = ra_alloc1(as, ir->op1, allow);
 	uint32_t m = asm_fuseopm(as, 0, ir->op2, rset_exclude(allow, rn));
 	emit_lso(as, ai, rd, rd, sizeof(GCstr));
@@ -277,7 +298,7 @@ static void asm_fusexref(ASMState *as, A64Ins ai, Reg rd, IRRef ref,
       if (!emit_checkofs(ai, ofs)) {
 	Reg rn = ra_alloc1(as, ref, allow);
 	Reg rm = ra_allock(as, ofs, rset_exclude(allow, rn));
-	emit_dnm(as, (ai ^ 0x01204800), rd, rn, rm);
+	emit_dnm(as, (ai^A64I_LS_R)|A64I_LS_UXTWx, rd, rn, rm);
 	return;
       }
     }
@@ -1247,7 +1268,6 @@ static void asm_intneg(ASMState *as, IRIns *ir)
   emit_dm(as, irt_is64(ir->t) ? A64I_NEGx : A64I_NEGw, dest, left);
 }
 
-/* NYI: use add/shift for MUL(OV) with constants. FOLD only does 2^k. */
 static void asm_intmul(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
