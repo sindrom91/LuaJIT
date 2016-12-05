@@ -1272,6 +1272,21 @@ static void asm_intmul(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
   Reg left = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
+  /* Use add/shift for MUL(OV) with constants. FOLD only does 2^k. */
+  if (irref_isk(ir->op2)) {
+    uint64_t k = get_k64val(IR(ir->op2));
+    if (k && !(k & (k-1))) {
+      if (irt_isguard(ir->t)) {
+        asm_guardcc(as, CC_VS);
+        emit_dnm(as, (irt_is64(ir->t) ? A64I_ADDSx : A64I_ADDSw) |
+                 A64F_SH(A64SH_LSL, emit_ctz64(k)), dest, RID_ZERO, left);
+      } else {
+        emit_dnm(as, (irt_is64(ir->t) ? A64I_ADDx : A64I_ADDw) |
+                 A64F_SH(A64SH_LSL, emit_ctz64(k)), dest, RID_ZERO, left);
+      }
+      return;
+    }
+  }
   Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
   if (irt_isguard(ir->t)) {  /* IR_MULOV */
     asm_guardcc(as, CC_NE);
