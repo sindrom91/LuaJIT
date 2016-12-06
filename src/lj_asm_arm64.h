@@ -1484,14 +1484,45 @@ static void asm_bitshift(ASMState *as, IRIns *ir, A64Ins ai, A64Shift sh)
   }
 }
 
+/* Fuse IR_BSHL and IR_BSHR/IR_BSAR into a single UBFM/SBFM instruction. */
+static int asm_fuselslxsr(ASMState *as, IRIns  *ir)
+{
+  IRIns *irl = IR(ir->op1);
+  lua_assert(ir->o == IR_BSHR || ir->o == IR_BSAR);
+  if (irl->o == IR_BSHL && !ra_used(irl) && irref_isk(ir->op2) &&
+      irref_isk(irl->op2)) {
+    int32_t sh = IR(ir->op2)->i - IR(irl->op2)->i;
+    uint32_t sz = irt_is64(ir->t) ? 64 : 32;
+    uint32_t immr = sh < 0 ? sh + sz : sh, imms = sz - IR(irl->op2)->i - 1;
+    A64Ins ai;
+    if (irt_is64(ir->t))
+      ai = ir->o == IR_BSHR ? A64I_UBFMx : A64I_SBFMx;
+    else
+      ai = ir->o == IR_BSHR ? A64I_UBFMw : A64I_SBFMw;
+    emit_dn(as, ai | A64F_IMMR(immr) | A64F_IMMS(imms),
+	    ra_dest(as, ir, RSET_GPR), ra_alloc1(as, irl->op1, RSET_GPR));
+    return 1;
+  }
+  return 0;
+}
+
 static void asm_bshr(ASMState *as, IRIns *ir)
 {
   if (asm_fuseandshr(as, ir))
     return;
+  if (asm_fuselslxsr(as, ir))
+    return;
   asm_bitshift(as, ir, A64I_UBFMw, A64SH_LSR);
 }
+
+static void asm_bsar(ASMState *as, IRIns *ir)
+{
+  if (asm_fuselslxsr(as, ir))
+    return;
+  asm_bitshift(as, ir, A64I_SBFMw, A64SH_ASR);
+}
+
 #define asm_bshl(as, ir)	asm_bitshift(as, ir, A64I_UBFMw, A64SH_LSL)
-#define asm_bsar(as, ir)	asm_bitshift(as, ir, A64I_SBFMw, A64SH_ASR)
 #define asm_bror(as, ir)	asm_bitshift(as, ir, A64I_EXTRw, A64SH_ROR)
 #define asm_brol(as, ir)	lua_assert(0)
 
