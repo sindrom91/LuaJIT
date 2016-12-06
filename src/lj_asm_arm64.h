@@ -1404,8 +1404,48 @@ static void asm_bitop(ASMState *as, IRIns *ir, A64Ins ai)
   }
 }
 
+/* Try to fuse IR_BAND and IR_BSHR into single UBFM instruction. */
+static int asm_fuseandshr(ASMState *as, IRIns *ir)
+{
+  IRIns *irl = IR(ir->op1);
+  int isand = ir->o == IR_BAND;
+  lua_assert(ir->o == IR_BAND || ir->o == IR_BSHR);
+  if (irref_isk(ir->op2) && (isand ? irl->o == IR_BSHR : irl->o == IR_BAND)) {
+    IRRef blref = irl->op1, brref = irl->op2;
+    if (!isand && asm_swapops(as, blref, brref)) {
+      IRRef tmp = blref; blref = brref; brref = tmp;
+    }
+    if (irref_isk(brref) && !ra_used(irl) /*&& (irl+1 == ir)*/) {
+      A64Ins ai = irt_is64(ir->t) ? A64I_UBFMx : A64I_UBFMw;
+      uint32_t width, shift;
+      uint64_t mask;
+      if (isand) {
+	shift = IR(brref)->i;
+	mask = get_k64val(IR(ir->op2));
+      } else {
+	shift = IR(ir->op2)->i;
+	mask = get_k64val(IR(brref)) >> shift;
+      }
+      width = 64 - emit_clz64(mask);
+      /* Mask needs to have continuous ones (no holes allowed). */
+      if (mask && !((mask + 1) & mask)) {
+	emit_dn(as, ai | A64F_IMMR(shift) | A64F_IMMS(width + shift - 1),
+		ra_dest(as, ir, RSET_GPR), ra_alloc1(as, blref, RSET_GPR));
+	return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+static void asm_band(ASMState *as, IRIns *ir)
+{
+  if (asm_fuseandshr(as, ir))
+    return;
+  asm_bitop(as, ir, A64I_ANDw);
+}
+
 #define asm_bnot(as, ir)	asm_bitop(as, ir, A64I_MVNw)
-#define asm_band(as, ir)	asm_bitop(as, ir, A64I_ANDw)
 #define asm_bor(as, ir)		asm_bitop(as, ir, A64I_ORRw)
 #define asm_bxor(as, ir)	asm_bitop(as, ir, A64I_EORw)
 
@@ -1444,8 +1484,13 @@ static void asm_bitshift(ASMState *as, IRIns *ir, A64Ins ai, A64Shift sh)
   }
 }
 
+static void asm_bshr(ASMState *as, IRIns *ir)
+{
+  if (asm_fuseandshr(as, ir))
+    return;
+  asm_bitshift(as, ir, A64I_UBFMw, A64SH_LSR);
+}
 #define asm_bshl(as, ir)	asm_bitshift(as, ir, A64I_UBFMw, A64SH_LSL)
-#define asm_bshr(as, ir)	asm_bitshift(as, ir, A64I_UBFMw, A64SH_LSR)
 #define asm_bsar(as, ir)	asm_bitshift(as, ir, A64I_SBFMw, A64SH_ASR)
 #define asm_bror(as, ir)	asm_bitshift(as, ir, A64I_EXTRw, A64SH_ROR)
 #define asm_brol(as, ir)	lua_assert(0)
