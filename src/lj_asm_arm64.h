@@ -317,6 +317,27 @@ static void asm_fusexref(ASMState *as, A64Ins ai, Reg rd, IRRef ref,
   emit_lso(as, ai, (rd & 31), base, ofs);
 }
 
+/* Fuse to multiply-add/sub instruction. */
+static int asm_fusemadd(ASMState *as, IRIns *ir, A64Ins ai, A64Ins air)
+{
+  IRRef lref = ir->op1, rref = ir->op2;
+  IRIns *irm;
+  if (lref != rref &&
+      ((mayfuse(as, lref) && (irm = IR(lref), irm->o == IR_MUL) &&
+       ra_noreg(irm->r)) ||
+       (mayfuse(as, rref) && (irm = IR(rref), irm->o == IR_MUL) &&
+       (rref = lref, ai = air, ra_noreg(irm->r))))) {
+    Reg dest = ra_dest(as, ir, RSET_FPR);
+    Reg add = ra_hintalloc(as, rref, dest, RSET_FPR);
+    Reg right, left = ra_alloc2(as, irm,
+                       rset_exclude(rset_exclude(RSET_FPR, dest), add));
+    right = (left >> 8); left &= 255;
+    emit_dnma(as, ai, (dest & 31), (left & 31), (right & 31), (add & 31));
+    return 1;
+  }
+  return 0;
+}
+
 /* -- Calls --------------------------------------------------------------- */
 
 /* Generate a call to a C function. */
@@ -1312,7 +1333,8 @@ static void asm_intmul(ASMState *as, IRIns *ir)
 static void asm_add(ASMState *as, IRIns *ir)
 {
   if (irt_isnum(ir->t)) {
-    asm_fparith(as, ir, A64I_FADDd);
+    if (!asm_fusemadd(as, ir, A64I_FMADDd, A64I_FMADDd))
+      asm_fparith(as, ir, A64I_FADDd);
     return;
   }
   asm_intop_s(as, ir, A64I_ADDw);
@@ -1321,7 +1343,8 @@ static void asm_add(ASMState *as, IRIns *ir)
 static void asm_sub(ASMState *as, IRIns *ir)
 {
   if (irt_isnum(ir->t)) {
-    asm_fparith(as, ir, A64I_FSUBd);
+    if (!asm_fusemadd(as, ir, A64I_FNMSUBd, A64I_FMSUBd))
+      asm_fparith(as, ir, A64I_FSUBd);
     return;
   }
   asm_intop_s(as, ir, A64I_SUBw);
