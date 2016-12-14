@@ -174,8 +174,12 @@ typedef enum A64Ins {
   A64I_ANDSx = 0xea000000,
   A64I_EORw = 0x4a000000,
   A64I_EORx = 0xca000000,
+  A64I_EONw = 0x4a200000,
+  A64I_EONx = 0xca200000,
   A64I_ORRw = 0x2a000000,
   A64I_ORRx = 0xaa000000,
+  A64I_ORNw = 0x2a200000,
+  A64I_ORNx = 0xaa200000,
   A64I_TSTw  = 0x6a00001f,
   A64I_TSTx  = 0xea00001f,
 

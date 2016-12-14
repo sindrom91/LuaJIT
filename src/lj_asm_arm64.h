@@ -407,6 +407,28 @@ static int asm_fuseorshift(ASMState *as, IRIns *ir)
   return 0;
 }
 
+/* Fuse NOT + OR/EOR into ORN/EON. */
+static int asm_fusenotor(ASMState *as, IRIns *ir, A64Ins ai)
+{
+  IRRef lref = ir->op1, rref = ir->op2;
+  IRIns *irl = IR(lref), *irr = IR(rref);
+  lua_assert(ir->o == IR_BOR || ir->o == IR_BXOR);
+  if ((canfuse(as, irl) && irl->o == IR_BNOT && !irref_isk(rref)) ||
+      (canfuse(as, irr) && irr->o == IR_BNOT && !irref_isk(lref))) {
+    Reg left, dest = ra_dest(as, ir, RSET_GPR);
+    uint32_t m;
+    if (irl->o == IR_BNOT) {
+      IRRef tmp = lref; lref = rref; rref = tmp;
+    }
+    left = ra_alloc1(as, lref, RSET_GPR);
+    m = asm_fuseopm(as, ai, IR(rref)->op1, rset_exclude(RSET_GPR, left));
+    if (irt_is64(ir->t)) ai |= A64I_X;
+    emit_dn(as, ai^m, dest, left);
+    return 1;
+  }
+  return 0;
+}
+
 /* -- Calls --------------------------------------------------------------- */
 
 /* Generate a call to a C function. */
@@ -1493,11 +1515,19 @@ static void asm_bor(ASMState *as, IRIns *ir)
 {
   if (asm_fuseorshift(as, ir))
     return;
+  if (asm_fusenotor(as, ir, A64I_ORNw))
+    return;
   asm_bitop(as, ir, A64I_ORRw);
 }
 
+static void asm_bxor(ASMState *as, IRIns *ir)
+{
+  if (asm_fusenotor(as, ir, A64I_EONw))
+    return;
+  asm_bitop(as, ir, A64I_EORw);
+}
+
 #define asm_bnot(as, ir)	asm_bitop(as, ir, A64I_MVNw)
-#define asm_bxor(as, ir)	asm_bitop(as, ir, A64I_EORw)
 
 static void asm_bswap(ASMState *as, IRIns *ir)
 {
