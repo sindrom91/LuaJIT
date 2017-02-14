@@ -337,6 +337,11 @@ enum {
 #endif
 #if LJ_TARGET_MIPS
   LJ_K64_2P31,		/* 2^31 */
+#if LJ_64
+  LJ_K64_2P63,		/* 2^63 */
+  LJ_K64_2P64,		/* 2^64 */
+  LJ_K64_M2P64,		/* -2^64 */
+#endif
 #endif
   LJ_K64__MAX,
 };

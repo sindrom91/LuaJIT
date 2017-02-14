@@ -85,7 +85,8 @@ local nexitsym = 0
 local function fillsymtab_tr(tr, nexit)
   local t = {}
   symtabmt.__index = t
-  if jit.arch == "mips" or jit.arch == "mipsel" then
+  if jit.arch == "mips" or jit.arch == "mipsel" or
+     jit.arch == "mips64" or jit.arch == "mips64el" then
     t[traceexitstub(tr, 0)] = "exit"
     return
   end
@@ -623,7 +624,8 @@ local function dump_texit(tr, ex, ngpr, nfpr, ...)
 	if i % 8 == 0 then out:write("\n") end
       end
     end
-    if jit.arch == "mips" or jit.arch == "mipsel" then
+    if jit.arch == "mips" or jit.arch == "mipsel" or
+       jit.arch == "mips64" or jit.arch == "mips64el" then
       for i=1,nfpr,2 do
 	out:write(format(" %+17.14g", regs[ngpr+i]))
 	if i % 8 == 7 then out:write("\n") end

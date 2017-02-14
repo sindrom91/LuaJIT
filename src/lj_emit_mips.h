@@ -3,8 +3,31 @@
 ** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 */
 
-/* -- Emit basic instructions --------------------------------------------- */
+#if LJ_64
+static uint64_t get_k64val(IRIns *ir)
+{
+  if (ir->o == IR_KINT64) {
+    return ir_kint64(ir)->u64;
+  } else if (ir->o == IR_KGC) {
+    return (uint64_t)ir_kgc(ir);
+  } else if (ir->o == IR_KPTR || ir->o == IR_KKPTR) {
+    return (uint64_t)ir_kptr(ir);
+  } else {
+    lua_assert(ir->o == IR_KINT || ir->o == IR_KNULL);
+    return ir->i;  /* Sign-extended. */
+  }
+}
+#endif
 
+#if LJ_64
+#define get_kval(ir)		get_k64val(ir)
+#else
+#define get_kval(ir)		((ir)->i)
+#endif
+
+#define intptr(p)		(LJ_32 ? i32ptr(p) : i64ptr(p))
+
+/* -- Emit basic instructions --------------------------------------------- */
 static void emit_dst(ASMState *as, MIPSIns mi, Reg rd, Reg rs, Reg rt)
 {
   *--as->mcp = mi | MIPSF_D(rd) | MIPSF_S(rs) | MIPSF_T(rt);
@@ -16,6 +39,7 @@ static void emit_dta(ASMState *as, MIPSIns mi, Reg rd, Reg rt, uint32_t a)
 }
 
 #define emit_ds(as, mi, rd, rs)		emit_dst(as, (mi), (rd), (rs), 0)
+
 #define emit_tg(as, mi, rt, rg)		emit_dst(as, (mi), (rg)&31, 0, (rt))
 
 static void emit_tsi(ASMState *as, MIPSIns mi, Reg rt, Reg rs, int32_t i)
@@ -35,7 +59,7 @@ static void emit_fgh(ASMState *as, MIPSIns mi, Reg rf, Reg rg, Reg rh)
 
 static void emit_rotr(ASMState *as, Reg dest, Reg src, Reg tmp, uint32_t shift)
 {
-  if ((as->flags & JIT_F_MIPSXXR2)) {
+  if (LJ_64 || (as->flags & JIT_F_MIPSXXR2)) {
     emit_dta(as, MIPSI_ROTR, dest, src, shift);
   } else {
     emit_dst(as, MIPSI_OR, dest, dest, tmp);
@@ -43,6 +67,13 @@ static void emit_rotr(ASMState *as, Reg dest, Reg src, Reg tmp, uint32_t shift)
     emit_dta(as, MIPSI_SRL, tmp, src, shift);
   }
 }
+#if LJ_64
+static void emit_tsml(ASMState *as, MIPSIns mi, Reg rt, Reg rs, uint32_t msb,
+		      uint32_t lsb)
+{
+  *--as->mcp = mi | MIPSF_T(rt) | MIPSF_S(rs) | MIPSF_M(msb) | MIPSF_L(lsb);
+}
+#endif
 
 /* -- Emit loads/stores --------------------------------------------------- */
 
@@ -58,7 +89,7 @@ static int emit_kdelta1(ASMState *as, Reg t, int32_t i)
     IRRef ref = regcost_ref(as->cost[r]);
     lua_assert(r != t);
     if (ref < ASMREF_L) {
-      int32_t delta = i - (ra_iskref(ref) ? ra_krefk(as, ref) : IR(ref)->i);
+      intptr_t delta = i - (ra_iskref(ref) ? ra_krefk(as, ref) : IR(ref)->i);
       if (checki16(delta)) {
 	emit_tsi(as, MIPSI_ADDIU, t, r, delta);
 	return 1;
@@ -76,8 +107,8 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
     emit_ti(as, MIPSI_LI, r, i);
   } else {
     if ((i & 0xffff)) {
-      int32_t jgl = i32ptr(J2G(as->J));
-      if ((uint32_t)(i-jgl) < 65536) {
+      intptr_t jgl = (intptr_t)(void *)J2G(as->J);
+      if ((uintptr_t)(i-jgl) < 65536) {
 	emit_tsi(as, MIPSI_ADDIU, r, RID_JGL, i-jgl-32768);
 	return;
       } else if (emit_kdelta1(as, r, i)) {
@@ -92,7 +123,27 @@ static void emit_loadi(ASMState *as, Reg r, int32_t i)
   }
 }
 
+#if LJ_64
+/* Load a 64 bit constant into a GPR. */
+static void emit_loadu64(ASMState *as, Reg r, uint64_t u64)
+{
+  if (checki32(u64)) {
+    emit_loadi(as, r, (int32_t)u64);
+  } else {
+    /* TODO: Optimize this. */
+    emit_tsi(as, MIPSI_ORI, r, r, u64 & 0xffff);
+    emit_dta(as, MIPSI_DSLL, r, r, 16);
+    emit_tsi(as, MIPSI_ORI, r, r, (u64 >> 16) & 0xffff);
+    emit_dta(as, MIPSI_DSLL, r, r, 16);
+    emit_tsi(as, MIPSI_ORI, r, r, (u64 >> 32) & 0xffff);
+    emit_ti(as, MIPSI_LUI, r, (u64 >> 48));
+  }
+}
+
+#define emit_loada(as, r, addr)		emit_loadu64(as, (r), u64ptr((addr)))
+#else
 #define emit_loada(as, r, addr)		emit_loadi(as, (r), i32ptr((addr)))
+#endif
 
 static Reg ra_allock(ASMState *as, intptr_t k, RegSet allow);
 static void ra_allockreg(ASMState *as, intptr_t k, Reg r);
@@ -100,8 +151,8 @@ static void ra_allockreg(ASMState *as, intptr_t k, Reg r);
 /* Get/set from constant pointer. */
 static void emit_lsptr(ASMState *as, MIPSIns mi, Reg r, void *p, RegSet allow)
 {
-  int32_t jgl = i32ptr(J2G(as->J));
-  int32_t i = i32ptr(p);
+  intptr_t jgl = (intptr_t)(J2G(as->J));
+  intptr_t i = (intptr_t)(p);
   Reg base;
   if ((uint32_t)(i-jgl) < 65536) {
     i = i-jgl-32768;
@@ -112,8 +163,24 @@ static void emit_lsptr(ASMState *as, MIPSIns mi, Reg r, void *p, RegSet allow)
   emit_tsi(as, mi, r, base, i);
 }
 
+#if LJ_64
+static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
+{
+  const uint64_t *k = &ir_k64(ir)->u64;
+  Reg r64 = r;
+  if (rset_test(RSET_FPR, r)) {
+    r64 = RID_TMP;
+    emit_tg(as, MIPSI_DMTC1, r64, r);
+  }
+  if ((uint32_t)((intptr_t)k-(intptr_t)J2G(as->J)) < 65536)
+    emit_lsptr(as, MIPSI_LD, r64, (void *)k, 0);
+  else
+    emit_loadu64(as, r64, *k);
+}
+#else
 #define emit_loadk64(as, r, ir) \
   emit_lsptr(as, MIPSI_LDC1, ((r) & 31), (void *)&ir_knum((ir))->u64, RSET_GPR)
+#endif
 
 /* Get/set global_State fields. */
 static void emit_lsglptr(ASMState *as, MIPSIns mi, Reg r, int32_t ofs)
@@ -122,9 +189,11 @@ static void emit_lsglptr(ASMState *as, MIPSIns mi, Reg r, int32_t ofs)
 }
 
 #define emit_getgl(as, r, field) \
-  emit_lsglptr(as, MIPSI_LW, (r), (int32_t)offsetof(global_State, field))
+  emit_lsglptr(as, LJ_64 ? MIPSI_LD : MIPSI_LW, (r), \
+	       (int32_t)offsetof(global_State, field))
 #define emit_setgl(as, r, field) \
-  emit_lsglptr(as, MIPSI_SW, (r), (int32_t)offsetof(global_State, field))
+  emit_lsglptr(as, LJ_64 ? MIPSI_SD : MIPSI_SW, (r), \
+	       (int32_t)offsetof(global_State, field))
 
 /* Trace number is determined from per-trace exit stubs. */
 #define emit_setvmstate(as, i)		UNUSED(i)
@@ -164,7 +233,7 @@ static void emit_call(ASMState *as, void *target, int needcfa)
     needcfa = 1;
   }
   as->mcp = p;
-  if (needcfa) ra_allockreg(as, i32ptr(target), RID_CFUNCADDR);
+  if (needcfa) ra_allockreg(as, (intptr_t)target, RID_CFUNCADDR);
 }
 
 /* -- Emit generic operations --------------------------------------------- */
@@ -185,7 +254,7 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r < RID_MAX_GPR)
-    emit_tsi(as, MIPSI_LW, r, base, ofs);
+    emit_tsi(as, irt_is64(ir->t) ? MIPSI_LD : MIPSI_LW, r, base, ofs);
   else
     emit_tsi(as, irt_isnum(ir->t) ? MIPSI_LDC1 : MIPSI_LWC1,
 	     (r & 31), base, ofs);
@@ -195,7 +264,7 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r < RID_MAX_GPR)
-    emit_tsi(as, MIPSI_SW, r, base, ofs);
+    emit_tsi(as, irt_is64(ir->t) ? MIPSI_SD : MIPSI_SW, r, base, ofs);
   else
     emit_tsi(as, irt_isnum(ir->t) ? MIPSI_SDC1 : MIPSI_SWC1,
 	     (r&31), base, ofs);
@@ -206,7 +275,7 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 {
   if (ofs) {
     lua_assert(checki16(ofs));
-    emit_tsi(as, MIPSI_ADDIU, r, r, ofs);
+    emit_tsi(as, LJ_64 ? MIPSI_DADDIU : MIPSI_ADDIU, r, r, ofs);
   }
 }
 
