@@ -12,6 +12,8 @@ static intptr_t get_k64val(IRIns *ir)
     return (intptr_t)ir_kgc(ir);
   } else if (ir->o == IR_KPTR || ir->o == IR_KKPTR) {
     return (intptr_t)ir_kptr(ir);
+  } else if (LJ_SOFTFP && ir->o == IR_KNUM) {
+    return (intptr_t)ir_knum(ir)->u64;
   } else {
     lua_assert(ir->o == IR_KINT || ir->o == IR_KNULL);
     return ir->i;  /* Sign-extended. */
@@ -244,6 +246,18 @@ static void emit_call(ASMState *as, void *target, int needcfa)
   }
   as->mcp = p;
   if (needcfa) ra_allockreg(as, (intptr_t)target, RID_CFUNCADDR);
+}
+
+static int is_branch(uint32_t ins)
+{
+  return ((ins & 0xfc000000u) == MIPSI_BEQ ||
+	  (ins & 0xfc000000u) == MIPSI_BNE ||
+	  (ins & 0xfc1f0000u) == MIPSI_BLEZ ||
+	  (ins & 0xfc1f0000u) == MIPSI_BGTZ ||
+	  (ins & 0xfc1f0000u) == MIPSI_BLTZ ||
+	  (ins & 0xfc1f0000u) == MIPSI_BGEZ ||
+	  (ins & 0xffe30000u) == MIPSI_BC1F ||
+	  (ins & 0xffe30000u) == MIPSI_BC1T);
 }
 
 /* -- Emit generic operations --------------------------------------------- */
