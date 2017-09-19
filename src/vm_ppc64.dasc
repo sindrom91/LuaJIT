@@ -28,70 +28,27 @@
 |// PPE     Power Processor Element of Cell (PS3) or Xenon (Xbox 360).
 |//         Must avoid (slow) micro-coded instructions.
 |
-|.if P64
-|.define TOC, 1
-|.define TOCENV, 1
 |.macro lpx, a, b, c; ldx a, b, c; .endmacro
 |.macro lp, a, b; ld a, b; .endmacro
 |.macro stp, a, b; std a, b; .endmacro
 |.define decode_OPP, decode_OP8
-|.else
-|.macro lpx, a, b, c; lwzx a, b, c; .endmacro
-|.macro lp, a, b; lwz a, b; .endmacro
-|.macro stp, a, b; stw a, b; .endmacro
-|.define decode_OPP, decode_OP4
-|.endif
 |
-|// Convenience macros for TOC handling.
-|.if TOC
-|// Linker needs a TOC patch area for every external call relocation.
 |.macro blex, target; bl extern target; nop; .endmacro
 |.macro .toc, a, b; .endmacro
-|.if P64
-|.define TOC_OFS,	 8
-|.define ENV_OFS,	16
-|.else
-|.define TOC_OFS,	4
-|.define ENV_OFS,	8
-|.endif
-|.else  // No TOC.
-|.macro blex, target; bl extern target@plt; .endmacro
-|.macro .toc, a, b; .endmacro
-|.endif
 |.macro .tocenv, a, b; .if TOCENV; a, b; .endif; .endmacro
-|
 |.macro .gpr64, a, b; .if GPR64; a, b; .endif; .endmacro
 |
 |.macro andix., y, a, i
-|.if PPE
-|  rlwinm y, a, 0, 31-lj_fls(i), 31-lj_ffs(i)
-|  cmpwi y, 0
-|.else
 |  andi. y, a, i
-|.endif
 |.endmacro
 |
 |.macro clrso, reg
-|.if PPE
-|  li reg, 0
-|  mtxer reg
-|.else
 |  mcrxr cr0
-|.endif
 |.endmacro
 |
 |.macro checkov, reg, noov
-|.if PPE
-|  mfxer reg
-|  add reg, reg, reg
-|  cmpwi reg, 0
-|   li reg, 0
-|   mtxer reg
-|  bgey noov
-|.else
 |  mcrxr cr0
 |  bley noov
-|.endif
 |.endmacro
 |
 |//-----------------------------------------------------------------------
@@ -152,10 +109,8 @@
 |.define CARG4,		r6	// Overlaps TMP3.
 |.define CARG5,		r7	// Overlaps INS.
 |
-|.if FPU
 |.define FARG1,		f1
 |.define FARG2,		f2
-|.endif
 |
 |.define CRET1,		r3
 |.define CRET2,		r4
@@ -164,169 +119,60 @@
 |.define ENVREG,	r11	// Environment pointer (nested C functions).
 |
 |// Stack layout while in interpreter. Must match with lj_frame.h.
-|.if GPR64
-|.if FRAME32
 |
-|//			456(sp) // \ 32/64 bit C frame info
-|.define TONUM_LO,	452(sp) // |
-|.define TONUM_HI,	448(sp) // |
-|.define TMPD_LO,	444(sp) // |
-|.define TMPD_HI,	440(sp) // |
-|.define SAVE_CR,	432(sp) // | 64 bit CR save.
-|.define SAVE_ERRF,	424(sp) //  > Parameter save area.
-|.define SAVE_NRES,	420(sp) // |
-|.define SAVE_L,	416(sp) // |
-|.define SAVE_PC,	412(sp) // |
-|.define SAVE_MULTRES,	408(sp) // |
-|.define SAVE_CFRAME,	400(sp) // / 64 bit C frame chain.
-|//			392(sp) // Reserved.
-|.define CFRAME_SPACE,	384     // Delta for sp.
-|// Back chain for sp:	384(sp) <-- sp entering interpreter
-|.define SAVE_LR,	376(sp) // 32 bit LR stored in hi-part.
-|.define SAVE_GPR_,	232     // .. 232+18*8: 64 bit GPR saves.
-|.define SAVE_FPR_,	88      // .. 88+18*8: 64 bit FPR saves.
-|//			80(sp) // Needed for 16 byte stack frame alignment.
-|//			16(sp)  // Callee parameter save area (ABI mandated).
-|//			8(sp)   // Reserved
-|// Back chain for sp:	0(sp)   <-- sp while in interpreter
-|// 32 bit sp stored in hi-part of 0(sp).
-|
-|.define TMPD_BLO,	447(sp)
-|.define TMPD,		TMPD_HI
-|.define TONUM_D,	TONUM_HI
-|
-|.else
-|
-|//			508(sp) // \ 32 bit C frame info.
-|.define SAVE_ERRF,	472(sp) // |
-|.define SAVE_NRES,	468(sp) // |
-|.define SAVE_L,	464(sp) //  > Parameter save area.
-|.define SAVE_PC,	460(sp) // |
-|.define SAVE_MULTRES,	456(sp) // |
-|.define SAVE_CFRAME,	448(sp) // / 64 bit C frame chain.
-|.define SAVE_LR,	416(sp)
-|.define CFRAME_SPACE,	400     // Delta for sp.
-|// Back chain for sp:	400(sp) <-- sp entering interpreter
-|.define SAVE_FPR_,	256     // .. 256+18*8: 64 bit FPR saves.
-|.define SAVE_GPR_,	112     // .. 112+18*8: 64 bit GPR saves.
-|//			48(sp)  // Callee parameter save area (ABI mandated).
-|.define SAVE_TOC,	40(sp)  // TOC save area.
-|.define TMPD_LO,	36(sp)  // \ Link editor temp (ABI mandated).
-|.define TMPD_HI,	32(sp)  // /
-|.define TONUM_LO,	28(sp)  // \ Compiler temp (ABI mandated).
-|.define TONUM_HI,	24(sp)  // /
+|.define SAVE_LR,	400(sp)
+|.define CFRAME_SPACE,	384	// Delta for sp (16 byte aligned).
+|// Back chain for sp:	384(sp)	<-- sp entering interpreter
+|.define SAVE_ERRF,	368(sp)	// 32 bit values.
+|.define SAVE_NRES,	364(sp)
+|.define SAVE_MULTRES,	360(sp)
+|.define SAVE_L,	352(sp)	// 64 bit values.
+|.define SAVE_PC,	344(sp)
+|.define SAVE_CFRAME,	336(sp)
+|.define TMPD_HI,	332(sp)
+|.define TMPD_LO,	328(sp)
+|.define TONUM_HI,	324(sp)
+|.define TONUM_LO,	320(sp)
+|.define SAVE_FPR_,	176	// .. 176+18*8: 64 bit FPR saves.
+|.define SAVE_GPR_,	32	// .. 32+18*8: 64 bit GPR saves.
+|.define SAVE_TOC,	24(sp)
 |// Next frame lr:	16(sp)
-|.define SAVE_CR,	8(sp)  // 64 bit CR save.
-|// Back chain for sp:	0(sp)	<-- sp while in interpreter
+|.define SAVE_CR,	8(sp)
+|// Back chain for sp:	0(sp)   <-- sp while in interpreter
 |
-|.define TMPD_BLO,	39(sp)
-|.define TMPD,		TMPD_HI
-|.define TONUM_D,	TONUM_HI
-|
-|.endif
-|.else
-|
-|.if FPU
-|.define SAVE_LR,	276(sp)
-|.define CFRAME_SPACE,	272     // Delta for sp.
-|// Back chain for sp:	272(sp) <-- sp entering interpreter
-|.define SAVE_FPR_,	128     // .. 128+18*8: 64 bit FPR saves.
-|.else
-|.define SAVE_LR,	132(sp)
-|.define CFRAME_SPACE,	128     // Delta for sp.
-|// Back chain for sp:	128(sp) <-- sp entering interpreter
-|.endif
-|.define SAVE_GPR_,	56      // .. 56+18*4: 32 bit GPR saves.
-|.define SAVE_CR,	52(sp)  // 32 bit CR save.
-|.define SAVE_ERRF,	48(sp)  // 32 bit C frame info.
-|.define SAVE_NRES,	44(sp)
-|.define SAVE_CFRAME,	40(sp)
-|.define SAVE_L,	36(sp)
-|.define SAVE_PC,	32(sp)
-|.define SAVE_MULTRES,	28(sp)
-|.define UNUSED1,	24(sp)
-|.if FPU
-|.define TMPD_LO,	20(sp)
-|.define TMPD_HI,	16(sp)
-|.define TONUM_LO,	12(sp)
-|.define TONUM_HI,	8(sp)
-|.else
-|.define SFSAVE_4,	20(sp)
-|.define SFSAVE_3,	16(sp)
-|.define SFSAVE_2,	12(sp)
-|.define SFSAVE_1,	8(sp)
-|.endif
-|// Next frame lr:	4(sp)
-|// Back chain for sp:	0(sp)	<-- sp while in interpreter
-|
-|.if FPU
 |.define TMPD_BLO,	23(sp)
 |.define TMPD,		TMPD_HI
 |.define TONUM_D,	TONUM_HI
-|.endif
-|
-|.endif
 |
 |.macro save_, reg
-|.if GPR64
 |  std r..reg, SAVE_GPR_+(reg-14)*8(sp)
-|.else
-|  stw r..reg, SAVE_GPR_+(reg-14)*4(sp)
-|.endif
-|  .FPU stfd f..reg, SAVE_FPR_+(reg-14)*8(sp)
+|  stfd f..reg, SAVE_FPR_+(reg-14)*8(sp)
 |.endmacro
 |.macro rest_, reg
-|.if GPR64
 |  ld r..reg, SAVE_GPR_+(reg-14)*8(sp)
-|.else
-|  lwz r..reg, SAVE_GPR_+(reg-14)*4(sp)
-|.endif
-|  .FPU lfd f..reg, SAVE_FPR_+(reg-14)*8(sp)
+|  lfd f..reg, SAVE_FPR_+(reg-14)*8(sp)
 |.endmacro
 |
 |.macro saveregs
-|.if GPR64 and not FRAME32
 |  stdu sp, -CFRAME_SPACE(sp)
-|.else
-|  stwu sp, -CFRAME_SPACE(sp)
-|.endif
 |  save_ 14; save_ 15; save_ 16
 |  mflr r0
 |  save_ 17; save_ 18; save_ 19; save_ 20; save_ 21; save_ 22
-|.if GPR64 and not FRAME32
 |  std r0, SAVE_LR
-|.else
-|  stw r0, SAVE_LR
-|.endif
 |  save_ 23; save_ 24; save_ 25
 |  mfcr r0
 |  save_ 26; save_ 27; save_ 28; save_ 29; save_ 30; save_ 31
-|.if GPR64
 |  std r0, SAVE_CR
-|.else
-|  stw r0, SAVE_CR
-|.endif
-|  .toc std TOCREG, SAVE_TOC
+|  std TOCREG, SAVE_TOC
 |.endmacro
 |
 |.macro restoreregs
-|.if GPR64 and not FRAME32
 |  ld r0, SAVE_LR
-|.else
-|  lwz r0, SAVE_LR
-|.endif
-|.if GPR64
 |  ld r12, SAVE_CR
-|.else
-|  lwz r12, SAVE_CR
-|.endif
 |  rest_ 14; rest_ 15; rest_ 16; rest_ 17; rest_ 18; rest_ 19
 |  mtlr r0;
-|.if PPE; mtocrf 0x20, r12; .else; mtcrf 0x38, r12; .endif
 |  rest_ 20; rest_ 21; rest_ 22; rest_ 23; rest_ 24; rest_ 25
-|.if PPE; mtocrf 0x10, r12; .endif
 |  rest_ 26; rest_ 27; rest_ 28; rest_ 29; rest_ 30; rest_ 31
-|.if PPE; mtocrf 0x08, r12; .endif
 |  addi sp, sp, CFRAME_SPACE
 |.endmacro
 |
@@ -351,7 +197,6 @@
 |// Trap for not-yet-implemented parts.
 |.macro NYI; tw 4, sp, sp; .endmacro
 |
-|.if FPU
 |// int/FP conversions.
 |.macro tonum_i, freg, reg
 |  xoris reg, reg, 0x8000
@@ -375,7 +220,6 @@
 |.macro toint, reg, freg
 |  toint reg, freg, freg
 |.endmacro
-|.endif
 |
 |//-----------------------------------------------------------------------
 |
