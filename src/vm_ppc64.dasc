@@ -586,16 +586,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  lp TMP1, L:CARG1->cframe
   |    mr L, CARG1
   |   stw CARG3, SAVE_NRES
-  |    lwz DISPATCH, L->glref		// Setup pointer to dispatch table.
-  |   stw CARG1, SAVE_L
+  |    ld DISPATCH, L->glref		// Setup pointer to dispatch table.
+  |   std CARG1, SAVE_L
   |     mr BASE, CARG2
   |    addi DISPATCH, DISPATCH, GG_G2DISP
-  |   stw CARG1, SAVE_PC		// Any value outside of bytecode is ok.
+  |   std CARG1, SAVE_PC		// Any value outside of bytecode is ok.
   |  stp TMP1, SAVE_CFRAME
   |  stp sp, L->cframe			// Add our C frame to cframe chain.
   |
   |3:  // Entry point for vm_cpcall/vm_resume (BASE = base, PC = ftype).
-  |  stw L, DISPATCH_GL(cur_L)(DISPATCH)
+  |  std L, DISPATCH_GL(cur_L)(DISPATCH)
   |  lp TMP2, L->base			// TMP2 = old base (used in vmeta_call).
   |     li TISNUM, LJ_TISNUM		// Setup type comparison constants.
   |   lp TMP1, L->top
