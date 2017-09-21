@@ -629,29 +629,23 @@ static void build_subroutines(BuildCtx *ctx)
   |  // (lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
   |  saveregs
   |  mr L, CARG1
-  |   lwz TMP0, L:CARG1->stack
-  |  stw CARG1, SAVE_L
-  |   lp TMP1, L->top
-  |     lwz DISPATCH, L->glref		// Setup pointer to dispatch table.
-  |  stw CARG1, SAVE_PC			// Any value outside of bytecode is ok.
+  |   ld TMP0, L:CARG1->stack
+  |  std CARG1, SAVE_L
+  |   ld TMP1, L->top
+  |     ld DISPATCH, L->glref		// Setup pointer to dispatch table.
+  |  std CARG1, SAVE_PC			// Any value outside of bytecode is ok.
   |   sub TMP0, TMP0, TMP1		// Compute -savestack(L, L->top).
-  |    lp TMP1, L->cframe
+  |    ld TMP1, L->cframe
   |     addi DISPATCH, DISPATCH, GG_G2DISP
-  |  .toc lp CARG4, 0(CARG4)
   |  li TMP2, 0
   |   stw TMP0, SAVE_NRES		// Neg. delta means cframe w/o frame.
   |  stw TMP2, SAVE_ERRF		// No error function.
-  |    stp TMP1, SAVE_CFRAME
-  |    stp sp, L->cframe		// Add our C frame to cframe chain.
-  |     stw L, DISPATCH_GL(cur_L)(DISPATCH)
+  |    std TMP1, SAVE_CFRAME
+  |    std sp, L->cframe		// Add our C frame to cframe chain.
+  |     std L, DISPATCH_GL(cur_L)(DISPATCH)
   |  mtctr CARG4
   |  bctrl			// (lua_State *L, lua_CFunction func, void *ud)
-  |.if PPE
-  |  mr BASE, CRET1
-  |  cmpwi CRET1, 0
-  |.else
   |  mr. BASE, CRET1
-  |.endif
   |   li PC, FRAME_CP
   |  bne <3				// Else continue with the call.
   |  b ->vm_leave_cp			// No base? Just remove C frame.
