@@ -79,6 +79,7 @@
 |.define RD,		r12
 |.define INS,		r7	// Overlaps CARG5.
 |
+|.define ITYPE,		r26
 |.define TMP0,		r0
 |.define TMP1,		r8
 |.define TMP2,		r9
@@ -318,11 +319,11 @@
 |  cleartp dst, reg
 |  bne target
 |.endmacro
+|.macro checkstr, reg, target; checktp reg, LJ_TSTR, target; .endmacro
 |
 |// Macros to test operand types.
 |.macro checknum, reg; cmplw reg, TISNUM; .endmacro
 |.macro checknum, cr, reg; cmplw cr, reg, TISNUM; .endmacro
-|.macro checkstr, reg; cmpwi reg, LJ_TSTR; .endmacro
 |.macro checktab, reg; cmpwi reg, LJ_TTAB; .endmacro
 |.macro checkfunc, reg; cmpwi reg, LJ_TFUNC; .endmacro
 |.macro checknil, reg; cmpwi reg, LJ_TNIL; .endmacro
@@ -1214,7 +1215,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   lwz TMP0, 4+offsetof(Node, key)(NODE:TMP2)
   |    lwz CARG2, NODE:TMP2->val
   |     lwz TMP1, 4+offsetof(Node, val)(NODE:TMP2)
-  |  checkstr CARG4; bne >4
+  |  checkstr CARG4, >4
   |   cmpw TMP0, STR:RC; beq >5
   |4:
   |  lwz NODE:TMP2, NODE:TMP2->next
@@ -1280,7 +1281,8 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.ffunc_1 tostring
   |  // Only handles the string or number case inline.
-  |  checkstr CARG3
+  |  gettp ITYPE, CARG3
+  |  cmpdi ITYPE, LJ_TSTR
   |  // A __tostring method in the string base metatable is ignored.
   |  beq ->fff_restv			// String key?
   |  // Handle numbers inline, unless a number base metatable is present.
@@ -1952,8 +1954,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   lwz CARG3, 0(BASE)
   |    lwz STR:CARG1, 4(BASE)
   |  bne ->fff_fallback			// Need exactly 1 argument.
-  |   checkstr CARG3
-  |   bne ->fff_fallback
+  |   checkstr CARG3, ->fff_fallback
   |  lwz TMP0, STR:CARG1->len
   |.if DUALNUM
   |   lbz CARG1, STR:CARG1[1]		// Access is always ok (NUL at end).
@@ -2037,7 +2038,7 @@ static void build_subroutines(BuildCtx *ctx)
   |1:
   |  checknum CARG2; bge ->fff_fallback
   |.endif
-  |  checkstr TMP0; bne ->fff_fallback
+  |  checkstr TMP0, ->fff_fallback
   |.if not DUALNUM
   |   toint TMP1, f1
   |.endif
@@ -2086,9 +2087,8 @@ static void build_subroutines(BuildCtx *ctx)
   |   lwz CARG3, 0(BASE)
   |    lwz STR:CARG2, 4(BASE)
   |  blt ->fff_fallback
-  |  checkstr CARG3
+  |  checkstr CARG3, ->fff_fallback
   |   la SBUF:CARG1, DISPATCH_GL(tmpbuf)(DISPATCH)
-  |  bne ->fff_fallback
   |   lwz TMP0, SBUF:CARG1->b
   |  stw L, SBUF:CARG1->L
   |  stp BASE, L->base
@@ -3268,7 +3268,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = dst*8, RD = src*8
     |  lwzux TMP0, RD, BASE
     |   lwz CARG1, 4(RD)
-    |  checkstr TMP0; bne >2
+    |  checkstr TMP0, >2
     |  lwz CRET1, STR:CARG1->len
     |1:
     |.if DUALNUM
@@ -3895,7 +3895,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  b ->vmeta_tgetv
     |
     |5:
-    |  checkstr CARG2; bne ->vmeta_tgetv
+    |  checkstr CARG2, ->vmeta_tgetv
     |.if not DUALNUM
     |  lwz STR:RC, 4(RC)
     |.endif
@@ -3925,7 +3925,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   lwz TMP0, 4+offsetof(Node, key)(NODE:TMP2)
     |    lwz CARG2, NODE:TMP2->val
     |     lwz TMP1, 4+offsetof(Node, val)(NODE:TMP2)
-    |  checkstr CARG1; bne >4
+    |  checkstr CARG1, >4
     |   cmpw TMP0, STR:RC; bne >4
     |    checknil CARG2; beq >5		// Key found, but nil value?
     |3:
@@ -4056,7 +4056,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  b ->vmeta_tsetv
     |
     |5:
-    |  checkstr CARG2; bne ->vmeta_tsetv
+    |  checkstr CARG2, ->vmeta_tsetv
     |.if not DUALNUM
     |  lwz STR:RC, 4(RC)
     |.endif
@@ -4093,7 +4093,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   lwz TMP0, 4+offsetof(Node, key)(NODE:TMP2)
     |    lwz CARG2, NODE:TMP2->val
     |     lwz NODE:TMP1, NODE:TMP2->next
-    |  checkstr CARG1; bne >5
+    |  checkstr CARG1, >5
     |   cmpw TMP0, STR:RC; bne >5
     |    checknil CARG2; beq >4		// Key found, but nil value?
     |2:
