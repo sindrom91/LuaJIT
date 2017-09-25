@@ -291,6 +291,34 @@
 |
 |//-----------------------------------------------------------------------
 |
+|// Clear type tag. Isolate lowest 47 bits of reg.
+|.macro cleartp, reg; clrldi reg, reg, 17; .endmacro
+|.macro cleartp, dst, reg; clrldi dst, reg, 17; .endmacro
+|
+|// Set type tag: Merge 17 type and 47 value bits.
+|.macro settp, dst, tp
+|  li ITYPE, tp
+|  sldi ITYPE, ITYPE, 47
+|  add dst, dst, ITYPE
+|.endmacro
+|
+|// Extract (negative) type tag.
+|.macro gettp, dst, src; sradi dst, src, 47; .endmacro
+|
+|// Macros to check the TValue type and extract the GCobj. Branch on failure.
+|.macro checktp, reg, tp, target
+|  gettp ITYPE, reg
+|  cmpdi ITYPE, tp
+|  cleartp reg
+|  bne target
+|.endmacro
+|.macro checktp, dst, reg, tp, target
+|  gettp ITYPE, reg
+|  cmpdi ITYPE, tp
+|  cleartp dst, reg
+|  bne target
+|.endmacro
+|
 |// Macros to test operand types.
 |.macro checknum, reg; cmplw reg, TISNUM; .endmacro
 |.macro checknum, cr, reg; cmplw cr, reg, TISNUM; .endmacro
