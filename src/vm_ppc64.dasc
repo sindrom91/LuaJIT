@@ -321,11 +321,11 @@
 |.endmacro
 |.macro checkstr, reg, target; checktp reg, LJ_TSTR, target; .endmacro
 |.macro checktab, reg, target; checktp reg, LJ_TTAB, target; .endmacro
+|.macro checkfunc, reg, target; checktp reg, LJ_TFUNC, target; .endmacro
 |
 |// Macros to test operand types.
 |.macro checknum, reg; cmplw reg, TISNUM; .endmacro
 |.macro checknum, cr, reg; cmplw cr, reg, TISNUM; .endmacro
-|.macro checkfunc, reg; cmpwi reg, LJ_TFUNC; .endmacro
 |.macro checknil, reg; cmpwi reg, LJ_TNIL; .endmacro
 |
 |.macro branch_RD
@@ -648,7 +648,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  // TMP2 = old base, BASE = new base, RC = nargs*8, PC = caller PC
   |  lwz TMP0, FRAME_PC(BASE)
   |   lwz LFUNC:RB, FRAME_FUNC(BASE)
-  |  checkfunc TMP0; bne ->vmeta_call
+  |  checkfunc TMP0, ->vmeta_call
   |
   |->vm_call_dispatch_f:
   |  ins_call
@@ -1404,7 +1404,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  blt ->fff_fallback
   |  lbz TMP1, DISPATCH_GL(hookmask)(DISPATCH)
   |   mr TMP2, BASE
-  |  checkfunc CARG3; bne ->fff_fallback  // Traceback must be a function.
+  |  checkfunc CARG3, ->fff_fallback  // Traceback must be a function.
   |   la BASE, 16(BASE)
   |  // Remember active hook before pcall.
   |  rlwinm TMP1, TMP1, 32-HOOK_ACTIVE_SHIFT, 31, 31
@@ -3892,7 +3892,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   lwz LFUNC:RB, 4(BASE)
     |    subi NARGS8:RC, NARGS8:RC, 8
     |   addi BASE, BASE, 8
-    |  checkfunc TMP0; bne ->vmeta_call
+    |  checkfunc TMP0, ->vmeta_call
     |  ins_call
     break;
 
@@ -3907,9 +3907,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   lwz LFUNC:RB, 4(RA)
     |    subi NARGS8:RC, NARGS8:RC, 8
     |    lwz TMP1, FRAME_PC(BASE)
-    |  checkfunc TMP0
+    |  checkfunc TMP0, ->vmeta_callt
     |   addi RA, RA, 8
-    |  bne ->vmeta_callt
     |->BC_CALLT_Z:
     |  andix. TMP0, TMP1, FRAME_TYPE	// Caveat: preserve cr0 until the crand.
     |   lbz TMP3, LFUNC:RB->ffid
@@ -3962,11 +3961,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |    lfd f0, -16(BASE)
     |  stw TMP1, 0(BASE)		// Copy callable.
     |   stw LFUNC:RB, 4(BASE)
-    |  checkfunc TMP1
+    |  checkfunc TMP1, ->vmeta_call
     |     li NARGS8:RC, 16		// Iterators get 2 arguments.
     |    stfd f1, 16(BASE)		// Copy control var.
     |    stfdu f0, 8(BASE)		// Copy state.
-    |  bne ->vmeta_call
     |  ins_call
     break;
 
