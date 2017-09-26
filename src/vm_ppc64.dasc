@@ -320,11 +320,11 @@
 |  bne target
 |.endmacro
 |.macro checkstr, reg, target; checktp reg, LJ_TSTR, target; .endmacro
+|.macro checktab, reg, target; checktp reg, LJ_TTAB, target; .endmacro
 |
 |// Macros to test operand types.
 |.macro checknum, reg; cmplw reg, TISNUM; .endmacro
 |.macro checknum, cr, reg; cmplw cr, reg, TISNUM; .endmacro
-|.macro checktab, reg; cmpwi reg, LJ_TTAB; .endmacro
 |.macro checkfunc, reg; cmpwi reg, LJ_TFUNC; .endmacro
 |.macro checknil, reg; cmpwi reg, LJ_TNIL; .endmacro
 |
@@ -1193,7 +1193,7 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: getters and setters ---------------------------------
   |
   |.ffunc_1 getmetatable
-  |  checktab CARG3; bne >6
+  |  checktab CARG3, >6
   |1:  // Field metatable must be at same offset for GCtab and GCudata!
   |  lwz TAB:CARG1, TAB:CARG1->metatable
   |2:
@@ -1243,9 +1243,9 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.ffunc_2 setmetatable
   |  // Fast path: no mt for table yet and not clearing the mt.
-  |   checktab CARG3; bne ->fff_fallback
+  |   checktab CARG3, ->fff_fallback
   |  lwz TAB:TMP1, TAB:CARG1->metatable
-  |   checktab CARG4; bne ->fff_fallback
+  |   checktab CARG4, ->fff_fallback
   |  cmplwi TAB:TMP1, 0
   |   lbz TMP3, TAB:CARG1->marked
   |  bne ->fff_fallback
@@ -1260,7 +1260,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   lwz CARG4, 0(BASE)
   |    lwz TAB:CARG2, 4(BASE)
   |  blt ->fff_fallback
-  |  checktab CARG4; bne ->fff_fallback
+  |  checktab CARG4, ->fff_fallback
   |   la CARG3, 8(BASE)
   |   mr CARG1, L
   |  bl extern lj_tab_get  // (lua_State *L, GCtab *t, cTValue *key)
@@ -1313,9 +1313,8 @@ static void build_subroutines(BuildCtx *ctx)
   |    lwz TAB:CARG2, 4(BASE)
   |  blt ->fff_fallback
   |   stwx TISNIL, BASE, NARGS8:RC	// Set missing 2nd arg to nil.
-  |  checktab CARG1
+  |  checktab CARG1, ->fff_fallback
   |   lwz PC, FRAME_PC(BASE)
-  |  bne ->fff_fallback
   |   stp BASE, L->base			// Add frame since C call can throw.
   |  mr CARG1, L
   |   stp BASE, L->top			// Dummy frame length is ok.
@@ -1335,9 +1334,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  b ->fff_res
   |
   |.ffunc_1 pairs
-  |  checktab CARG3
+  |  checktab CARG3, ->fff_fallback
   |   lwz PC, FRAME_PC(BASE)
-  |  bne ->fff_fallback
 #if LJ_52
   |   lwz TAB:TMP2, TAB:CARG1->metatable
   |  lfd f0, CFUNC:RB->upvalue[0]
@@ -1358,43 +1356,20 @@ static void build_subroutines(BuildCtx *ctx)
   |   lwz CARG3, 0(BASE)
   |    lwz TAB:CARG1, 4(BASE)
   |   lwz CARG4, 8(BASE)
-  |.if DUALNUM
   |    lwz TMP2, 12(BASE)
-  |.else
-  |    lfd FARG2, 8(BASE)
-  |.endif
   |  blt ->fff_fallback
-  |  checktab CARG3
+  |  checktab CARG3, ->fff_fallback
   |  checknum cr1, CARG4
   |   lwz PC, FRAME_PC(BASE)
-  |.if DUALNUM
-  |  bne ->fff_fallback
   |  bne cr1, ->fff_fallback
-  |.else
-  |    lus TMP0, 0x3ff0
-  |    stw ZERO, TMPD_LO
-  |  bne ->fff_fallback
-  |    stw TMP0, TMPD_HI
-  |  bge cr1, ->fff_fallback
-  |    lfd FARG1, TMPD
-  |  toint TMP2, FARG2, f0
-  |.endif
   |   lwz TMP0, TAB:CARG1->asize
   |   lwz TMP1, TAB:CARG1->array
-  |.if not DUALNUM
-  |  fadd FARG2, FARG2, FARG1
-  |.endif
   |  addi TMP2, TMP2, 1
   |   la RA, -8(BASE)
   |  cmplw TMP0, TMP2
-  |.if DUALNUM
   |  stw TISNUM, 0(RA)
   |   slwi TMP3, TMP2, 3
   |  stw TMP2, 4(RA)
-  |.else
-  |   slwi TMP3, TMP2, 3
-  |  stfd FARG2, 0(RA)
-  |.endif
   |  ble >2				// Not in array part?
   |  lwzx TMP2, TMP1, TMP3
   |  lfdx f0, TMP1, TMP3
@@ -1421,9 +1396,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  b <1
   |
   |.ffunc_1 ipairs
-  |  checktab CARG3
+  |  checktab CARG3, ->fff_fallback
   |   lwz PC, FRAME_PC(BASE)
-  |  bne ->fff_fallback
 #if LJ_52
   |   lwz TAB:TMP2, TAB:CARG1->metatable
   |  lfd f0, CFUNC:RB->upvalue[0]
@@ -3282,7 +3256,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endif
     |  ins_next2
     |2:
-    |  checktab TMP0; bne ->vmeta_len
+    |  checktab TMP0, ->vmeta_len
 #if LJ_52
     |  lwz TAB:TMP2, TAB:CARG1->metatable
     |  cmplwi TAB:TMP2, 0
@@ -3847,35 +3821,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lwzux CARG1, RB, BASE
     |  lwzux CARG2, RC, BASE
     |   lwz TAB:RB, 4(RB)
-    |.if DUALNUM
     |   lwz RC, 4(RC)
-    |.else
-    |   lfd f0, 0(RC)
-    |.endif
-    |  checktab CARG1
+    |  checktab CARG1, ->vmeta_tgetv
     |   checknum cr1, CARG2
-    |  bne ->vmeta_tgetv
-    |.if DUALNUM
     |  lwz TMP0, TAB:RB->asize
     |   bne cr1, >5
     |   lwz TMP1, TAB:RB->array
     |  cmplw TMP0, RC
     |   slwi TMP2, RC, 3
-    |.else
-    |   bge cr1, >5
-    |  // Convert number key to integer, check for integerness and range.
-    |  fctiwz f1, f0
-    |    fadd f2, f0, TOBIT
-    |  stfd f1, TMPD
-    |   lwz TMP0, TAB:RB->asize
-    |    fsub f2, f2, TOBIT
-    |  lwz TMP2, TMPD_LO
-    |   lwz TMP1, TAB:RB->array
-    |    fcmpu cr1, f0, f2
-    |  cmplw cr0, TMP0, TMP2
-    |  crand 4*cr0+gt, 4*cr0+gt, 4*cr1+eq
-    |   slwi TMP2, TMP2, 3
-    |.endif
     |  ble ->vmeta_tgetv		// Integer key and in array part?
     |  lwzx TMP0, TMP1, TMP2
     |   lfdx f14, TMP1, TMP2
@@ -3907,9 +3860,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   srwi TMP1, RC, 1
     |    lwz TAB:RB, 4(RB)
     |   subfic TMP1, TMP1, -4
-    |  checktab CARG1
+    |  checktab CARG1, ->vmeta_tgets1
     |   lwzx STR:RC, KBASE, TMP1	// KBASE-4-str_const*4
-    |  bne ->vmeta_tgets1
     |->BC_TGETS_Z:
     |  // TAB:RB = GCtab *, STR:RC = GCstr *, RA = dst*8
     |  lwz TMP0, TAB:RB->hmask
@@ -3954,7 +3906,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lwzux CARG1, RB, BASE
     |   srwi TMP0, RC, 3
     |   lwz TAB:RB, 4(RB)
-    |  checktab CARG1; bne ->vmeta_tgetb
+    |  checktab CARG1, ->vmeta_tgetb
     |  lwz TMP1, TAB:RB->asize
     |   lwz TMP2, TAB:RB->array
     |  cmplw TMP0, TMP1; bge ->vmeta_tgetb
@@ -4010,9 +3962,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |   lfd f0, 0(RC)
     |.endif
-    |  checktab CARG1
+    |  checktab CARG1, ->vmeta_tsetv
     |   checknum cr1, CARG2
-    |  bne ->vmeta_tsetv
     |.if DUALNUM
     |  lwz TMP0, TAB:RB->asize
     |   bne cr1, >5
@@ -4072,9 +4023,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   srwi TMP1, RC, 1
     |    lwz TAB:RB, 4(RB)
     |   subfic TMP1, TMP1, -4
-    |  checktab CARG1
+    |  checktab CARG1, ->vmeta_tsets1
     |   lwzx STR:RC, KBASE, TMP1	// KBASE-4-str_const*4
-    |  bne ->vmeta_tsets1
     |->BC_TSETS_Z:
     |  // TAB:RB = GCtab *, STR:RC = GCstr *, RA = src*8
     |  lwz TMP0, TAB:RB->hmask
@@ -4149,7 +4099,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  lwzux CARG1, RB, BASE
     |   srwi TMP0, RC, 3
     |   lwz TAB:RB, 4(RB)
-    |  checktab CARG1; bne ->vmeta_tsetb
+    |  checktab CARG1, ->vmeta_tsetb
     |  lwz TMP1, TAB:RB->asize
     |   lwz TMP2, TAB:RB->array
     |    lbz TMP3, TAB:RB->marked
