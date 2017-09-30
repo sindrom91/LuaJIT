@@ -4186,14 +4186,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   li TMP1, 0
     |2:
     |  addi TMP3, TMP1, 8
-    |   lfdx f0, RA, TMP1
+    |   ldx TMP0, RA, TMP1
     |  cmpw TMP3, RC
-    |   stfdx f0, TMP2, TMP1
+    |   stdx TMP0, TMP2, TMP1
     |  beq >3
     |  addi TMP1, TMP3, 8
-    |   lfdx f1, RA, TMP3
+    |   ldx TMP0, RA, TMP3
     |  cmpw TMP1, RC
-    |   stfdx f1, TMP2, TMP3
+    |   stdx TMP0, TMP2, TMP3
     |  bne <2
     |3:
     |5:
@@ -4203,14 +4203,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   sub BASE, TMP2, RA
     |  ld LFUNC:TMP1, FRAME_FUNC(BASE)
     |  ins_next1
+    |  cleartp LFUNC:TMP1
     |  ld TMP1, LFUNC:TMP1->pc
-    |  lwz KBASE, PC2PROTO(k)(TMP1)
+    |  ld KBASE, PC2PROTO(k)(TMP1)
     |  ins_next2
     |
     |6:  // Fill up results with nil.
     |  subi TMP1, RD, 8
     |   addi RD, RD, 8
-    |  stwx TISNIL, TMP2, TMP1
+    |  stdx TISNIL, TMP2, TMP1
     |  b <5
     |
     |->BC_RETV_Z:  // Non-standard return case.
@@ -4235,8 +4236,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   subi TMP2, BASE, 8
     |  decode_RB8 RB, INS
     if (op == BC_RET1) {
-      |  lfd f0, 0(RA)
-      |  stfd f0, 0(TMP2)
+      |  ld TMP0, 0(RA)
+      |  std TMP0, 0(TMP2)
     }
     |5:
     |  cmplw RB, RD
@@ -4245,14 +4246,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   sub BASE, TMP2, RA
     |  ld LFUNC:TMP1, FRAME_FUNC(BASE)
     |  ins_next1
+    |  cleartp LFUNC:TMP1
     |  ld TMP1, LFUNC:TMP1->pc
-    |  lwz KBASE, PC2PROTO(k)(TMP1)
+    |  ld KBASE, PC2PROTO(k)(TMP1)
     |  ins_next2
     |
     |6:  // Fill up results with nil.
     |  subi TMP1, RD, 8
     |   addi RD, RD, 8
-    |  stwx TISNIL, TMP2, TMP1
+    |  stdx TISNIL, TMP2, TMP1
     |  b <5
     break;
 
