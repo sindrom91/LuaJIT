@@ -4566,34 +4566,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |   add TMP1, RA, NARGS8:RC
     |   ld TMP2, L->maxstack
-    |  .toc lp TMP3, 0(RD)
     |    add RC, BASE, NARGS8:RC
     |   stp BASE, L->base
-    |   cmplw TMP1, TMP2
+    |   cmpld TMP1, TMP2
     |    stp RC, L->top
     |     li_vmstate C
-    |.if TOC
-    |  mtctr TMP3
-    |.else
     |  mtctr RD
-    |.endif
     if (op == BC_FUNCCW) {
       |  lp CARG2, CFUNC:RB->f
     }
     |  mr CARG1, L
     |   bgt ->vm_growstack_c		// Need to grow stack.
-    |  .toc lp TOCREG, TOC_OFS(RD)
-    |  .tocenv lp ENVREG, ENV_OFS(RD)
     |     st_vmstate
     |  bctrl				// (lua_State *L [, lua_CFunction f])
     |  // Returns nresults.
     |  lp BASE, L->base
-    |  .toc ld TOCREG, SAVE_TOC
     |   slwi RD, CRET1, 3
     |  lp TMP1, L->top
     |    li_vmstate INTERP
     |  ld PC, FRAME_PC(BASE)		// Fetch PC of caller.
-    |    stw L, DISPATCH_GL(cur_L)(DISPATCH)
+    |    std L, DISPATCH_GL(cur_L)(DISPATCH)
     |   sub RA, TMP1, RD		// RA = L->top - nresults*8
     |    st_vmstate
     |  b ->vm_returnc
