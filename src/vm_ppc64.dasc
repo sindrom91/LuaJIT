@@ -655,9 +655,8 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->vm_call_dispatch:
   |  // TMP2 = old base, BASE = new base, RC = nargs*8, PC = caller PC
-  |  lwz TMP0, FRAME_PC(BASE)
-  |   ld LFUNC:RB, FRAME_FUNC(BASE)
-  |  checkfunc TMP0, ->vmeta_call
+  |  ld LFUNC:RB, FRAME_FUNC(BASE)
+  |  checkfunc LFUNC:RB, ->vmeta_call
   |
   |->vm_call_dispatch_f:
   |  ins_call
