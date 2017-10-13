@@ -712,7 +712,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.if FFI
   |  ble >1
   |.endif
-  |    lwz KBASE, PC2PROTO(k)(TMP1)
+  |    ld KBASE, PC2PROTO(k)(TMP1)
   |  // BASE = base, RA = resultptr, RB = meta base
   |  mtctr TMP0
   |  bctr				// Jump to continuation.
@@ -2370,7 +2370,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   stw MULTRES, SAVE_MULTRES
   |  ld TMP1, LFUNC:RB->pc
   |    stw TMP2, DISPATCH_GL(jit_base)(DISPATCH)
-  |  lwz KBASE, PC2PROTO(k)(TMP1)
+  |  ld KBASE, PC2PROTO(k)(TMP1)
   |  // Setup type comparison constants.
   |  li TISNUM, LJ_TISNUM
   |  lus TMP3, 0x59c0		// TOBIT = 2^52 + 2^51 (float).
@@ -2411,7 +2411,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub TMP1, BASE, TMP0
   |  lwz LFUNC:TMP2, -12(TMP1)
   |  ld TMP1, LFUNC:TMP2->pc
-  |  lwz KBASE, PC2PROTO(k)(TMP1)
+  |  ld KBASE, PC2PROTO(k)(TMP1)
   |3:
   |   subi RC, MULTRES, 8
   |   add RA, RA, BASE
@@ -3957,7 +3957,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld LFUNC:TMP1, -32(TMP1)
     |  cleartp LFUNC:TMP1
     |  ld TMP1, LFUNC:TMP1->pc
-    |  lwz KBASE, PC2PROTO(k)(TMP1)	// Need to prepare KBASE.
+    |  ld KBASE, PC2PROTO(k)(TMP1)	// Need to prepare KBASE.
     |  b <4
     |
     |7:  // Tailcall from a vararg function.
@@ -4489,7 +4489,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // BASE = new base, RA = BASE+framesize*8, RB = LFUNC, RC = nargs*8
     |  ld TMP2, L->maxstack
     |   lbz TMP1, -4+PC2PROTO(numparams)(PC)
-    |    lwz KBASE, -4+PC2PROTO(k)(PC)
+    |    ld KBASE, -4+PC2PROTO(k)(PC)
     |  cmplw RA, TMP2
     |   slwi TMP1, TMP1, 3
     |  bgt ->vm_growstack_l
