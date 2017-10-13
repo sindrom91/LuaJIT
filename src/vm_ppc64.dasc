@@ -4522,32 +4522,31 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_IFUNCV:
     |  // BASE = new base, RA = BASE+framesize*8, RB = LFUNC, RC = nargs*8
     |  ld TMP2, L->maxstack
+    |   settp LFUNC:RB, LJ_TFUNC
     |   add TMP1, BASE, RC
     |  add TMP0, RA, RC
-    |   stw LFUNC:RB, 4(TMP1)		// Store copy of LFUNC.
-    |   addi TMP3, RC, 8+FRAME_VARG
-    |    lwz KBASE, -4+PC2PROTO(k)(PC)
+    |   std LFUNC:RB, 0(TMP1)		// Store (tagged) copy of LFUNC.
+    |   addi TMP3, RC, 16+FRAME_VARG
+    |    ld KBASE, -4+PC2PROTO(k)(PC)
     |  cmplw TMP0, TMP2
-    |   stw TMP3, 0(TMP1)		// Store delta + FRAME_VARG.
+    |   std TMP3, 8(TMP1)		// Store delta + FRAME_VARG.
     |  bge ->vm_growstack_l
     |  lbz TMP2, -4+PC2PROTO(numparams)(PC)
     |   mr RA, BASE
     |   mr RC, TMP1
     |  ins_next1
     |  cmpwi TMP2, 0
-    |   addi BASE, TMP1, 8
+    |   addi BASE, TMP1, 16
     |  beq >3
     |1:
     |  cmplw RA, RC			// Less args than parameters?
-    |   lwz TMP0, 0(RA)
-    |   lwz TMP3, 4(RA)
+    |   ld TMP0, 0(RA)
     |  bge >4
-    |    stw TISNIL, 0(RA)		// Clear old fixarg slot (help the GC).
+    |    std TISNIL, 0(RA)		// Clear old fixarg slot (help the GC).
     |    addi RA, RA, 8
     |2:
     |  addic. TMP2, TMP2, -1
-    |   stw TMP0, 8(TMP1)
-    |   stw TMP3, 12(TMP1)
+    |   std TMP0, 8(TMP1)
     |    addi TMP1, TMP1, 8
     |  bne <1
     |3:
