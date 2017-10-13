@@ -555,6 +555,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  lp RC, L->top
   |  ld LFUNC:RB, FRAME_FUNC(BASE)
   |  sub RC, RC, BASE
+  |  cleartp LFUNC:RB
   |  // BASE = new base, RB = LFUNC/CFUNC, RC = nargs*8, FRAME_PC(BASE) = PC
   |  ins_callt				// Just retry the call.
   |
@@ -706,6 +707,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmplwi TMP0, 1
   |.endif
   |     ld PC, -16(RB)			// Restore PC from [cont|PC].
+  |    cleartp LFUNC:TMP1
   |   subi TMP2, RD, 8
   |    ld TMP1, LFUNC:TMP1->pc
   |   stwx TISNIL, RA, TMP2		// Ensure one valid arg.
@@ -797,6 +799,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   add PC, TMP1, BASE
   |  ld LFUNC:RB, FRAME_FUNC(BASE)	// Guaranteed to be a function here.
   |   li NARGS8:RC, 16			// 2 args for func(t, k).
+  |  cleartp LFUNC:RB
   |  b ->vm_call_dispatch_f
   |
   |->vmeta_tgetr:
@@ -868,6 +871,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ld LFUNC:RB, FRAME_FUNC(BASE)	// Guaranteed to be a function here.
   |   li NARGS8:RC, 24			// 3 args for func(t, k, v)
   |  stfd f0, 16(BASE)			// Copy value to third argument.
+  |  cleartp LFUNC:RB
   |  b ->vm_call_dispatch_f
   |
   |->vmeta_tsetr:
@@ -1041,6 +1045,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  bl extern lj_meta_call	// (lua_State *L, TValue *func, TValue *top)
   |  ld LFUNC:RB, FRAME_FUNC(BASE)	// Guaranteed to be a function here.
   |   addi NARGS8:RC, SAVE0, 8		// Got one more argument now.
+  |  cleartp LFUNC:RB
   |  ins_call
   |
   |->vmeta_callt:			// Resolve __call for BC_CALLT.
@@ -1052,9 +1057,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  add CARG3, RA, RC
   |   mr SAVE0, NARGS8:RC
   |  bl extern lj_meta_call	// (lua_State *L, TValue *func, TValue *top)
-  |  ld TMP1, FRAME_PC(BASE)
-  |   addi NARGS8:RC, SAVE0, 8		// Got one more argument now.
-  |   ld LFUNC:RB, FRAME_FUNC(RA)	// Guaranteed to be a function here.
+  |  ld LFUNC:RB, FRAME_FUNC(RA)	// Guaranteed to be a function here.
+  |   ld TMP1, FRAME_PC(BASE)
+  |    addi NARGS8:RC, SAVE0, 8		// Got one more argument now.
+  |  cleartp LFUNC:RB
   |  b ->BC_CALLT_Z
   |
   |//-- Argument coercion for 'for' statement ------------------------------
@@ -2081,6 +2087,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   ld LFUNC:RB, FRAME_FUNC(BASE)
   |  sub NARGS8:RC, TMP0, BASE
   |  bne ->vm_call_tail			// Returned -1?
+  |   cleartp LFUNC:RB
   |  ins_callt				// Returned 0: retry fast path.
   |
   |// Reconstruct previous base for vmeta_call during tailcall.
@@ -2113,9 +2120,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  bl extern lj_gc_step		// (lua_State *L)
   |   lp BASE, L->base
   |  mtlr SAVE0
+  |   ld CFUNC:RB, FRAME_FUNC(BASE)
   |    lp TMP0, L->top
   |   sub NARGS8:RC, TMP0, BASE
-  |   ld CFUNC:RB, FRAME_FUNC(BASE)
+  |   cleartp CFUNC:RB
   |  blr
   |
   |//-----------------------------------------------------------------------
@@ -2190,8 +2198,9 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_hotloop:			// Hot loop counter underflow.
   |.if JIT
   |  ld LFUNC:TMP1, FRAME_FUNC(BASE)
-  |   addi CARG1, DISPATCH, GG_DISP2J
   |   std PC, SAVE_PC
+  |  cleartp LFUNC:TMP1
+  |   addi CARG1, DISPATCH, GG_DISP2J
   |  ld TMP1, LFUNC:TMP1->pc
   |   mr CARG2, PC
   |   stw L, DISPATCH_J(L)(DISPATCH)
@@ -2231,6 +2240,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ld LFUNC:RB, FRAME_FUNC(BASE)
   |  lwz INS, -4(PC)
   |  mtctr CRET1
+  |  cleartp LFUNC:RB
   |  bctr
   |
   |->cont_stitch:			// Trace stitching.
@@ -2367,6 +2377,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ld LFUNC:RB, FRAME_FUNC(BASE)
   |   slwi MULTRES, CARG1, 3
   |    li TMP2, 0
+  |  cleartp LFUNC:RB
   |   stw MULTRES, SAVE_MULTRES
   |  ld TMP1, LFUNC:RB->pc
   |    stw TMP2, DISPATCH_GL(jit_base)(DISPATCH)
@@ -2532,6 +2543,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    li_vmstate INTERP
   |     lfs TOBIT, TMPD
   |     stw TMP3, TMPD
+  |  cleartp LFUNC:RB
   |  sub RC, RC, BASE
   |    st_vmstate
   |     lfs TONUM, TMPD
@@ -3355,6 +3367,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld LFUNC:RB, FRAME_FUNC(BASE)
     |   srwi RD, RD, 1
     |   addi RD, RD, offsetof(GCfuncL, uvptr)
+    |  cleartp LFUNC:RB
     |  lwzx UPVAL:RB, LFUNC:RB, RD
     |  ins_next1
     |  lwz TMP1, UPVAL:RB->v
@@ -3367,6 +3380,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld LFUNC:RB, FRAME_FUNC(BASE)
     |    srwi RA, RA, 1
     |    addi RA, RA, offsetof(GCfuncL, uvptr)
+    |  cleartp LFUNC:RB
     |   lfdux f0, RD, BASE
     |  lwzx UPVAL:RB, LFUNC:RB, RA
     |  lbz TMP3, UPVAL:RB->marked
@@ -3400,6 +3414,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   srwi TMP1, RD, 1
     |    srwi RA, RA, 1
     |   subfic TMP1, TMP1, -4
+    |  cleartp LFUNC:RB
     |    addi RA, RA, offsetof(GCfuncL, uvptr)
     |   lwzx STR:TMP1, KBASE, TMP1	// KBASE-4-str_const*4
     |  lwzx UPVAL:RB, LFUNC:RB, RA
@@ -3430,6 +3445,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld LFUNC:RB, FRAME_FUNC(BASE)
     |   srwi RA, RA, 1
     |   addi RA, RA, offsetof(GCfuncL, uvptr)
+    |  cleartp LFUNC:RB
     |    lfdx f0, KBASE, RD
     |  lwzx UPVAL:RB, LFUNC:RB, RA
     |  ins_next1
@@ -3442,6 +3458,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld LFUNC:RB, FRAME_FUNC(BASE)
     |   srwi RA, RA, 1
     |    srwi TMP0, RD, 3
+    |  cleartp LFUNC:RB
     |   addi RA, RA, offsetof(GCfuncL, uvptr)
     |    not TMP0, TMP0
     |  lwzx UPVAL:RB, LFUNC:RB, RA
@@ -3471,10 +3488,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  srwi TMP1, RD, 1
     |   stp BASE, L->base
     |  subfic TMP1, TMP1, -4
+    |  ld LFUNC:CARG3, FRAME_FUNC(BASE)
     |   std PC, SAVE_PC
-    |  lwzx CARG2, KBASE, TMP1		// KBASE-4-tab_const*4
+    |    lwzx CARG2, KBASE, TMP1	// KBASE-4-tab_const*4
     |   mr CARG1, L
-    |  ld CARG3, FRAME_FUNC(BASE)
+    |  cleartp LFUNC:CARG3
     |  // (lua_State *L, GCproto *pt, GCfuncL *parent)
     |  bl extern lj_func_newL_gc
     |  // Returns GCfuncL *.
@@ -3536,6 +3554,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = src*8, RD = str_const*8 (~)
     |  ld LFUNC:TMP2, FRAME_FUNC(BASE)
     |   srwi TMP1, RD, 1
+    |  cleartp LFUNC:TMP2
     |  lwz TAB:RB, LFUNC:TMP2->env
     |   subfic TMP1, TMP1, -4
     |   lwzx STR:RC, KBASE, TMP1	// KBASE-4-str_const*4
@@ -3920,15 +3939,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_CALLT:
     |  // RA = base*8, (RB = 0,) RC = (nargs+1)*8
-    |  lwzux TMP0, RA, BASE
-    |   lwz LFUNC:RB, 4(RA)
+    |  ldux LFUNC:RB, RA, BASE
     |    subi NARGS8:RC, NARGS8:RC, 8
     |    ld TMP1, FRAME_PC(BASE)
-    |  checkfunc TMP0, ->vmeta_callt
+    |  checktp TMP2, RB, LJ_TFUNC, ->vmeta_callt
     |   addi RA, RA, 8
     |->BC_CALLT_Z:
     |  andix. TMP0, TMP1, FRAME_TYPE	// Caveat: preserve cr0 until the crand.
-    |   lbz TMP3, LFUNC:RB->ffid
+    |   lbz TMP3, LFUNC:TMP2->ffid
     |    xori TMP2, TMP1, FRAME_VARG
     |    cmplwi cr1, NARGS8:RC, 0
     |  bne >7
