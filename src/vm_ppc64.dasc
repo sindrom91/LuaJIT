@@ -492,7 +492,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mr sp, CARG1
   |  mr CRET1, CARG2
   |->vm_unwind_c_eh:			// Landing pad for external unwinder.
-  |  lwz L, SAVE_L
+  |  ld L, SAVE_L
   |  .toc ld TOCREG, SAVE_TOC
   |   li TMP0, ~LJ_VMST_C
   |  lwz GL:TMP1, L->glref
@@ -507,7 +507,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  rlwinm sp, CARG1, 0, 0, 29
   |.endif
   |->vm_unwind_ff_eh:			// Landing pad for external unwinder.
-  |  lwz L, SAVE_L
+  |  ld L, SAVE_L
   |  .toc ld TOCREG, SAVE_TOC
   |     li TISNUM, LJ_TISNUM		// Setup type comparison constants.
   |  lp BASE, L->base
@@ -570,7 +570,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    lwz DISPATCH, L->glref		// Setup pointer to dispatch table.
   |  mr BASE, CARG2
   |    lbz TMP1, L->status
-  |   stw L, SAVE_L
+  |   std L, SAVE_L
   |  li PC, FRAME_CP
   |  addi TMP0, sp, CFRAME_RESUME
   |    addi DISPATCH, DISPATCH, GG_G2DISP
@@ -2362,13 +2362,13 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |   ld PC, SAVE_PC			// Get SAVE_PC.
   |  stw TMP2, 0(sp)
-  |  stw L, SAVE_L			// Set SAVE_L (on-trace resume/yield).
+  |  std L, SAVE_L			// Set SAVE_L (on-trace resume/yield).
   |  b >1
   |.endif
   |->vm_exit_interp:
   |.if JIT
   |  // CARG1 = MULTRES or negated error code, BASE, PC and JGL set.
-  |  lwz L, SAVE_L
+  |  ld L, SAVE_L
   |  addi DISPATCH, JGL, -GG_DISP2G-32768
   |  stp BASE, L->base
   |1:
