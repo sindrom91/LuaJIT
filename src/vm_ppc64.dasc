@@ -3553,11 +3553,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_GSET:
     |  // RA = src*8, RD = str_const*8 (~)
     |  ld LFUNC:TMP2, FRAME_FUNC(BASE)
-    |   srwi TMP1, RD, 1
+    |   neg TMP1, TMP1
     |  cleartp LFUNC:TMP2
-    |  lwz TAB:RB, LFUNC:TMP2->env
-    |   subfic TMP1, TMP1, -4
-    |   lwzx STR:RC, KBASE, TMP1	// KBASE-4-str_const*4
+    |   ldx STR:RC, KBASE, TMP1		// KBASE-str_const*8
+    |  ld TAB:RB, LFUNC:TMP2->env
     if (op == BC_GGET) {
       |  b ->BC_TGETS_Z
     } else {
@@ -3601,45 +3600,42 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TGETS:
     |  // RA = dst*8, RB = table*8, RC = str_const*8 (~)
-    |  lwzux CARG1, RB, BASE
-    |   srwi TMP1, RC, 1
-    |    lwz TAB:RB, 4(RB)
-    |   subfic TMP1, TMP1, -4
-    |  checktab CARG1, ->vmeta_tgets1
-    |   lwzx STR:RC, KBASE, TMP1	// KBASE-4-str_const*4
+    |  ldux TAB:RB, RB, BASE
+    |   neg RC, RC
+    |  checktab TAB:RB, ->vmeta_tgets1
+    |   ldx STR:RC, KBASE, RC		// KBASE-str_const*8
     |->BC_TGETS_Z:
     |  // TAB:RB = GCtab *, STR:RC = GCstr *, RA = dst*8
     |  lwz TMP0, TAB:RB->hmask
-    |  lwz TMP1, STR:RC->hash
-    |  lwz NODE:TMP2, TAB:RB->node
+    |   lwz TMP1, STR:RC->hash
+    |    ld NODE:TMP2, TAB:RB->node
     |  and TMP1, TMP1, TMP0		// idx = str->hash & tab->hmask
     |  slwi TMP0, TMP1, 5
     |  slwi TMP1, TMP1, 3
     |  sub TMP1, TMP0, TMP1
-    |  add NODE:TMP2, NODE:TMP2, TMP1	// node = tab->node + (idx*32-idx*8)
+    |  add NODE:TMP2, NODE:TMP2, TMP1	// node = tab->node + (idx*3*8)
+    |  settp STR:RC, LJ_TSTR		// Tagged key to look for.
     |1:
-    |  lwz CARG1, NODE:TMP2->key
-    |   lwz TMP0, 4+offsetof(Node, key)(NODE:TMP2)
-    |    lwz CARG2, NODE:TMP2->val
-    |     lwz TMP1, 4+offsetof(Node, val)(NODE:TMP2)
-    |  checkstr CARG1, >4
-    |   cmpw TMP0, STR:RC; bne >4
-    |    checknil CARG2; beq >5		// Key found, but nil value?
+    |  ld CARG1, NODE:TMP2->key
+    |   ld CARG2, NODE:TMP2->val
+    |    ld TMP2, NODE:TMP2->next
+    |  cmpd STR:RC, CARG1
+    |  bne >4
+    |  cmpd TISNIL, CARG2
+    |  beq >5				// Key found, but nil value?
     |3:
-    |    stwux CARG2, RA, BASE
-    |     stw TMP1, 4(RA)
+    |  stdux CARG2, RA, BASE
     |  ins_next
     |
     |4:  // Follow hash chain.
-    |  lwz NODE:TMP2, NODE:TMP2->next
-    |  cmplwi NODE:TMP2, 0
+    |  cmpldi NODE:TMP2, 0
     |  bne <1
     |  // End of hash chain: key not found, nil result.
     |   li CARG2, LJ_TNIL
     |
     |5:  // Check for __index if table value is nil.
-    |  lwz TAB:TMP2, TAB:RB->metatable
-    |  cmplwi TAB:TMP2, 0
+    |  ld TAB:TMP2, TAB:RB->metatable
+    |  cmpldi TAB:TMP2, 0
     |  beq <3				// No metatable: done.
     |  lbz TMP0, TAB:TMP2->nomm
     |  andix. TMP0, TMP0, 1<<MM_index
