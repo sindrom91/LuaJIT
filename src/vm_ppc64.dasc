@@ -3508,11 +3508,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_TNEW:
   case BC_TDUP:
     |  // RA = dst*8, RD = (hbits|asize)*8 | tab_const*8 (~)
-    |  lwz TMP0, DISPATCH_GL(gc.total)(DISPATCH)
+    |  ld TMP0, DISPATCH_GL(gc.total)(DISPATCH)
     |   mr CARG1, L
-    |  lwz TMP1, DISPATCH_GL(gc.threshold)(DISPATCH)
+    |  ld TMP1, DISPATCH_GL(gc.threshold)(DISPATCH)
     |   stp BASE, L->base
-    |  cmplw TMP0, TMP1
+    |  cmpld TMP0, TMP1
     |   std PC, SAVE_PC
     |  bge >5
     |1:
@@ -3524,16 +3524,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  bl extern lj_tab_new  // (lua_State *L, int32_t asize, uint32_t hbits)
       |  // Returns Table *.
     } else {
-      |  srwi TMP1, RD, 1
-      |  subfic TMP1, TMP1, -4
-      |  lwzx CARG2, KBASE, TMP1		// KBASE-4-tab_const*4
+      |  neg TMP1, TMP1
+      |  ldx CARG2, KBASE, TMP1		// KBASE-tab_const*8
       |  bl extern lj_tab_dup  // (lua_State *L, Table *kt)
       |  // Returns Table *.
     }
+    |  settp CRET1, LJ_TTAB
     |  lp BASE, L->base
-    |   li TMP0, LJ_TTAB
-    |  stwux TMP0, RA, BASE
-    |  stw TAB:CRET1, 4(RA)
+    |  stdx CRET1, RA, BASE
     |  ins_next
     if (op == BC_TNEW) {
       |3:
