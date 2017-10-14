@@ -495,7 +495,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ld L, SAVE_L
   |  .toc ld TOCREG, SAVE_TOC
   |   li TMP0, ~LJ_VMST_C
-  |  lwz GL:TMP1, L->glref
+  |  ld GL:TMP1, L->glref
   |   stw TMP0, GL:TMP1->vmstate
   |  b ->vm_leave_unw
   |
@@ -512,7 +512,7 @@ static void build_subroutines(BuildCtx *ctx)
   |     li TISNUM, LJ_TISNUM		// Setup type comparison constants.
   |  lp BASE, L->base
   |     lus TMP3, 0x59c0		// TOBIT = 2^52 + 2^51 (float).
-  |   lwz DISPATCH, L->glref		// Setup pointer to dispatch table.
+  |   ld DISPATCH, L->glref		// Setup pointer to dispatch table.
   |     li ZERO, 0
   |     stw TMP3, TMPD
   |  li TMP1, LJ_TFALSE
@@ -567,7 +567,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  // (lua_State *L, TValue *base, int nres1 = 0, ptrdiff_t ef = 0)
   |  saveregs
   |  mr L, CARG1
-  |    lwz DISPATCH, L->glref		// Setup pointer to dispatch table.
+  |    ld DISPATCH, L->glref		// Setup pointer to dispatch table.
   |  mr BASE, CARG2
   |    lbz TMP1, L->status
   |   std L, SAVE_L
