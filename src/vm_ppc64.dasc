@@ -3642,27 +3642,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TGETB:
     |  // RA = dst*8, RB = table*8, RC = index*8
-    |  lwzux CARG1, RB, BASE
-    |   srwi TMP0, RC, 3
-    |   lwz TAB:RB, 4(RB)
-    |  checktab CARG1, ->vmeta_tgetb
-    |  lwz TMP1, TAB:RB->asize
-    |   lwz TMP2, TAB:RB->array
-    |  cmplw TMP0, TMP1; bge ->vmeta_tgetb
-    |  lwzx TMP1, TMP2, RC
-    |   lfdx f0, TMP2, RC
-    |  checknil TMP1; beq >5
+    |  ldx CARG2, RB, BASE
+    |   srwi RC, RC, 3
+    |  checktab CARG2, ->vmeta_tgetb
+    |  lwz CARG1, TAB:CARG2->asize
+    |   ld CARG3, TAB:CARG2->array
+    |  cmplw RC, CARG1
+    |   ldx TMP0, CARG3, RC
+    |  bge ->vmeta_tgetb
+    |   cmpld TMP0, TISNIL
+    |   beq >5
     |1:
     |  ins_next1
-    |   stfdx f0, BASE, RA
+    |   stdx TMP0, BASE, RA
     |  ins_next2
     |
     |5:  // Check for __index if table value is nil.
-    |  lwz TAB:TMP2, TAB:RB->metatable
-    |  cmplwi TAB:TMP2, 0
+    |  lwz TAB:CARG1, TAB:CARG2->metatable
+    |  cmplwi TAB:CARG1, 0
     |  beq <1				// No metatable: done.
-    |  lbz TMP2, TAB:TMP2->nomm
-    |  andix. TMP2, TMP2, 1<<MM_index
+    |  lbz TMP1, TAB:CARG1->nomm
+    |  andix. TMP1, TMP1, 1<<MM_index
     |  bne <1				// 'no __index' flag set: done.
     |  b ->vmeta_tgetb			// Caveat: preserve TMP0!
     break;
