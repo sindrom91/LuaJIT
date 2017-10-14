@@ -3564,28 +3564,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_TGETV:
     |  // RA = dst*8, RB = table*8, RC = key*8
-    |  lwzux CARG1, RB, BASE
-    |  lwzux CARG2, RC, BASE
-    |   lwz TAB:RB, 4(RB)
-    |   lwz RC, 4(RC)
+    |  ldx CARG1, RB, BASE
+    |  ldx CARG2, RC, BASE
     |  checktab CARG1, ->vmeta_tgetv
-    |  lwz TMP0, TAB:RB->asize
+    |  lwz TMP0, TAB:CARG1->asize
     |   checkint cr1, CARG2, >5
-    |   lwz TMP1, TAB:RB->array
-    |  cmplw TMP0, RC
-    |   slwi TMP2, RC, 3
+    |   ld TMP1, TAB:CARG1->array
+    |  cmplw TMP0, CARG2
+    |   slwi TMP2, CARG2, 3
     |  ble ->vmeta_tgetv		// Integer key and in array part?
-    |  lwzx TMP0, TMP1, TMP2
-    |   lfdx f14, TMP1, TMP2
-    |  checknil TMP0; beq >2
+    |  ldx TMP3, TMP1, TMP2
+    |  cmpld TMP3, TISNIL
+    |  beq >2
     |1:
     |  ins_next1
-    |   stfdx f14, BASE, RA
+    |   stdx TMP3, BASE, RA
     |  ins_next2
     |
     |2:  // Check for __index if table value is nil.
-    |  lwz TAB:TMP2, TAB:RB->metatable
-    |  cmplwi TAB:TMP2, 0
+    |  ld TAB:TMP2, TAB:CARG1->metatable
+    |  cmpldi TAB:TMP2, 0
     |  beq <1				// No metatable: done.
     |  lbz TMP0, TAB:TMP2->nomm
     |  andix. TMP0, TMP0, 1<<MM_index
@@ -3593,7 +3591,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  b ->vmeta_tgetv
     |
     |5:
-    |  checkstr CARG2, ->vmeta_tgetv
+    |  cmpdi ITYPE, LJ_TSTR
+    |  bne ->vmeta_tgetv
+    |  cleartp STR:RC, CARG2
     |  b ->BC_TGETS_Z			// String key?
     break;
   case BC_TGETS:
