@@ -3300,8 +3300,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_KSTR:
     |  // RA = dst*8, RD = str_const*8 (~)
-    |  neg RD, RD
-    |  ldx TMP0, KBASE, RD		// KBASE-str_const*8
+    |  subfic RD, RD, -8
+    |  ldx TMP0, KBASE, RD		// KBASE-8-str_const*8
     |  ins_next1
     |  settp TMP0, LJ_TSTR
     |  stdx TMP0, BASE, RA
@@ -3547,9 +3547,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_GSET:
     |  // RA = src*8, RD = str_const*8 (~)
     |  ld LFUNC:TMP2, FRAME_FUNC(BASE)
-    |   neg TMP1, TMP1
+    |   subfic RD, RD, -8
     |  cleartp LFUNC:TMP2
-    |   ldx STR:RC, KBASE, TMP1		// KBASE-str_const*8
+    |   ldx STR:RC, KBASE, RD		// KBASE-8-str_const*8
     |  ld TAB:RB, LFUNC:TMP2->env
     if (op == BC_GGET) {
       |  b ->BC_TGETS_Z
@@ -3595,9 +3595,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_TGETS:
     |  // RA = dst*8, RB = table*8, RC = str_const*8 (~)
     |  ldux TAB:RB, RB, BASE
-    |   neg RC, RC
+    |   subfic RC, RC, -8
     |  checktab TAB:RB, ->vmeta_tgets1
-    |   ldx STR:RC, KBASE, RC		// KBASE-str_const*8
+    |   ldx STR:RC, KBASE, RC		// KBASE-8-str_const*8
     |->BC_TGETS_Z:
     |  // TAB:RB = GCtab *, STR:RC = GCstr *, RA = dst*8
     |  lwz TMP0, TAB:RB->hmask
