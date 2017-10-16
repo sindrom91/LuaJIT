@@ -3300,13 +3300,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_KSTR:
     |  // RA = dst*8, RD = str_const*8 (~)
-    |  srwi TMP1, RD, 1
-    |  subfic TMP1, TMP1, -4
+    |  neg RD, RD
+    |  ldx TMP0, KBASE, RD		// KBASE-str_const*8
     |  ins_next1
-    |  lwzx TMP0, KBASE, TMP1		// KBASE-4-str_const*4
-    |  li TMP2, LJ_TSTR
-    |  stwux TMP2, RA, BASE
-    |  stw TMP0, 4(RA)
+    |  settp TMP0, LJ_TSTR
+    |  stdx TMP0, BASE, RA
     |  ins_next2
     break;
   case BC_KCDATA:
