@@ -1036,9 +1036,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  // TMP2 = old base, BASE = new base, RC = nargs*8
   |  mr CARG1, L
   |   stp TMP2, L->base			// This is the callers base!
-  |  subi CARG2, BASE, 8
+  |  subi CARG2, BASE, 16
   |   std PC, SAVE_PC
-  |  add CARG3, BASE, RC
+  |  add CARG3, BASE, NARGS8:RC
   |   mr SAVE0, NARGS8:RC
   |  bl extern lj_meta_call	// (lua_State *L, TValue *func, TValue *top)
   |  ld LFUNC:RB, FRAME_FUNC(BASE)	// Guaranteed to be a function here.
@@ -3914,12 +3914,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_CALL:
     |  // RA = base*8, (RB = (nresults+1)*8,) RC = (nargs+1)*8
-    |  mr TMP2, BASE
-    |  lwzux TMP0, BASE, RA
-    |   lwz LFUNC:RB, 4(BASE)
-    |    subi NARGS8:RC, NARGS8:RC, 8
-    |   addi BASE, BASE, 8
-    |  checkfunc TMP0, ->vmeta_call
+    |  mr TMP2, BASE			// Save old BASE for vmeta_call.
+    |  ldx LFUNC:TMP0, BASE, RA
+    |   subi NARGS8:RC, NARGS8:RC, 8
+    |   addi BASE, BASE, 16
+    |  checkfunc LFUNC:TMP0, ->vmeta_call
     |  ins_call
     break;
 
