@@ -3913,10 +3913,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_CALL:
     |  // RA = base*8, (RB = (nresults+1)*8,) RC = (nargs+1)*8
     |  mr TMP2, BASE			// Save old BASE for vmeta_call.
-    |  ldx LFUNC:TMP0, BASE, RA
+    |  ldx LFUNC:RB, BASE, RA
     |   subi NARGS8:RC, NARGS8:RC, 8
     |   addi BASE, BASE, 16
-    |  checkfunc LFUNC:TMP0, ->vmeta_call
+    |  checkfunc LFUNC:RB, ->vmeta_call
     |  ins_call
     break;
 
