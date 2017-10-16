@@ -805,13 +805,11 @@ static void build_subroutines(BuildCtx *ctx)
   |->vmeta_tgetr:
   |  bl extern lj_tab_getinth		// (GCtab *t, int32_t key)
   |  // Returns cTValue * or NULL.
-  |  cmplwi CRET1, 0
-  |  beq >1
-  |  lfd f14, 0(CRET1)
+  |  cmpldi CRET1, 0
+  |  mr TMP0, TISNIL
+  |  beq ->BC_TGETR_Z
+  |  ld TMP0, 0(CRET1)
   |  b ->BC_TGETR_Z
-  |1:
-  |  stwx TISNIL, BASE, RA
-  |  b ->cont_nop
   |
   |//-----------------------------------------------------------------------
   |
@@ -3668,19 +3666,18 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TGETR:
     |  // RA = dst*8, RB = table*8, RC = key*8
-    |  add RB, BASE, RB
-    |  lwz TAB:CARG1, 4(RB)
-    |  add RC, BASE, RC
-    |  lwz TMP0, TAB:CARG1->asize
-    |  lwz CARG2, 4(RC)
-    |   lwz TMP1, TAB:CARG1->array
-    |  cmplw TMP0, CARG2
-    |   slwi TMP2, CARG2, 3
+    |  ldx CARG1, BASE, RB
+    |   lwzx CARG2, BASE, RC		// Caveat: little-endian!
+    |  cleartp TAB:CARG1
+    |  lwz TMP2, TAB:CARG1->asize
+    |   ld CARG3, TAB:CARG1->array
+    |  cmplw CARG2, TMP2
+    |   slwi TMP1, CARG2, 3
     |  ble ->vmeta_tgetr		// In array part?
-    |   lfdx f14, TMP1, TMP2
+    |   ldx TMP0, CARG3, TMP1
     |->BC_TGETR_Z:
     |  ins_next1
-    |   stfdx f14, BASE, RA
+    |   stdx TMP0, BASE, RA
     |  ins_next2
     break;
 
