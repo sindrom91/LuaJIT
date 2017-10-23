@@ -3310,46 +3310,44 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_KCDATA:
     |.if FFI
     |  // RA = dst*8, RD = cdata_const*8 (~)
-    |  srwi TMP1, RD, 1
-    |  subfic TMP1, TMP1, -4
+    |  subfic RD, RD, -8
+    |  ldx TMP0, KBASE, RD		// KBASE-8-cdata_const*8
     |  ins_next1
-    |  lwzx TMP0, KBASE, TMP1		// KBASE-4-cdata_const*4
-    |  li TMP2, LJ_TCDATA
-    |  stwux TMP2, RA, BASE
-    |  stw TMP0, 4(RA)
+    |  settp TMP0, LJ_TCDATA
+    |  stdx TMP0, RA, BASE
     |  ins_next2
     |.endif
     break;
   case BC_KSHORT:
     |  // RA = dst*8, RD = int16_literal*8
-    |  slwi RD, RD, 13
-    |  srawi RD, RD, 16
+    |  srawi RD, INS, 16
+    |  clrldi RD, RD, 32
+    |  settp RD, LJ_TISNUM
     |  ins_next1
-    |   stwux TISNUM, RA, BASE
-    |   stw RD, 4(RA)
+    |   stdx RD, RA, BASE
     |  ins_next2
     break;
   case BC_KNUM:
     |  // RA = dst*8, RD = num_const*8
+    |  ldx TMP0, KBASE, RD
     |  ins_next1
-    |  lfdx f0, KBASE, RD
-    |  stfdx f0, BASE, RA
+    |  stdx TMP0, BASE, RA
     |  ins_next2
     break;
   case BC_KPRI:
     |  // RA = dst*8, RD = primitive_type*8 (~)
-    |  srwi TMP1, RD, 3
-    |  not TMP0, TMP1
+    |  sldi TMP0, RD, 44
+    |  not TMP0, TMP0
     |  ins_next1
-    |  stwx TMP0, BASE, RA
+    |  stdx TMP0, BASE, RA
     |  ins_next2
     break;
   case BC_KNIL:
     |  // RA = base*8, RD = end*8
-    |  stwx TISNIL, BASE, RA
+    |  stdx TISNIL, BASE, RA
     |   addi RA, RA, 8
     |1:
-    |  stwx TISNIL, BASE, RA
+    |  stdx TISNIL, BASE, RA
     |  cmpw RA, RD
     |   addi RA, RA, 8
     |  blt <1
