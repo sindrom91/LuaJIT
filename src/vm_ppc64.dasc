@@ -330,6 +330,17 @@
 |  bge target
 |.endmacro
 |
+|.macro mov_false, reg
+|  li reg, 1
+|  sldi reg, reg, 47
+|  not reg, reg
+|.endmacro
+|.macro mov_true, reg
+|  li reg, 1
+|  sldi reg, reg, 48
+|  not reg, reg
+|.endmacro
+|
 |// Macros to test operand types.
 |.macro checknil, reg; cmpwi reg, LJ_TNIL; .endmacro
 |
@@ -391,7 +402,7 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_returnp:
   |  // See vm_return. Also: TMP2 = previous base.
   |  andix. TMP0, PC, FRAME_P
-  |   li TMP1, LJ_TTRUE
+  |   mov_true TMP1
   |  beq ->cont_dispatch
   |
   |  // Return from pcall or xpcall fast func.
@@ -511,7 +522,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   ld DISPATCH, L->glref		// Setup pointer to dispatch table.
   |     li ZERO, 0
   |     stw TMP3, TMPD
-  |  li TMP1, LJ_TFALSE
+  |  mov_false TMP1
   |     ori TMP3, TMP3, 0x0004	// TONUM = 2^52 + 2^51 + 2^31 (float).
   |     li TISNIL, LJ_TNIL
   |    li_vmstate INTERP
@@ -1503,7 +1514,7 @@ static void build_subroutines(BuildCtx *ctx)
   |6:
   |  andix. TMP0, PC, FRAME_TYPE
   |.if resume
-  |  li TMP1, LJ_TTRUE
+  |  mov_true TMP1
   |   la RA, -8(BASE)
   |  stw TMP1, -8(BASE)			// Prepend true to results.
   |  addi RD, RD, 16
@@ -1521,7 +1532,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.if resume
   |  andix. TMP0, PC, FRAME_TYPE
   |  la TMP3, -8(TMP3)
-  |   li TMP1, LJ_TFALSE
+  |   mov_false TMP1
   |  lfd f0, 0(TMP3)
   |   stp TMP3, L:SAVE0->top		// Remove error from coroutine stack.
   |    li RD, (2+1)*8
