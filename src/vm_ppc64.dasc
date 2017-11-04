@@ -297,11 +297,7 @@
 |.macro cleartp, dst, reg; clrldi dst, reg, 17; .endmacro
 |
 |// Set type tag: Merge 17 type and 47 value bits.
-|.macro settp, dst, tp
-|  li ITYPE, tp
-|  sldi ITYPE, ITYPE, 47
-|  add dst, dst, ITYPE
-|.endmacro
+|.macro settp, dst, tp; rldimi dst, tp, 47, 0; .endmacro
 |
 |// Extract (negative) type tag.
 |.macro gettp, dst, src; sradi dst, src, 47; .endmacro
@@ -3302,8 +3298,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = dst*8, RD = str_const*8 (~)
     |  subfic RD, RD, -8
     |  ldx TMP0, KBASE, RD		// KBASE-8-str_const*8
+    |  li ITYPE, LJ_TSTR
     |  ins_next1
-    |  settp TMP0, LJ_TSTR
+    |  settp TMP0, ITYPE
     |  stdx TMP0, BASE, RA
     |  ins_next2
     break;
@@ -3312,8 +3309,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = dst*8, RD = cdata_const*8 (~)
     |  subfic RD, RD, -8
     |  ldx TMP0, KBASE, RD		// KBASE-8-cdata_const*8
+    |  li ITYPE, LJ_TCDATA
     |  ins_next1
-    |  settp TMP0, LJ_TCDATA
+    |  settp TMP0, ITYPE
     |  stdx TMP0, RA, BASE
     |  ins_next2
     |.endif
@@ -3322,7 +3320,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = dst*8, RD = int16_literal*8
     |  srawi RD, INS, 16
     |  clrldi RD, RD, 32
-    |  settp RD, LJ_TISNUM
+    |  settp RD, TISNUM
     |  ins_next1
     |   stdx RD, RA, BASE
     |  ins_next2
@@ -3523,7 +3521,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  bl extern lj_tab_dup  // (lua_State *L, Table *kt)
       |  // Returns Table *.
     }
-    |  settp CRET1, LJ_TTAB
+    |  li ITYPE, LJ_TTAB
+    |  settp CRET1, ITYPE
     |  lp BASE, L->base
     |  stdx CRET1, RA, BASE
     |  ins_next
@@ -3605,8 +3604,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  slwi TMP0, TMP1, 5
     |  slwi TMP1, TMP1, 3
     |  sub TMP1, TMP0, TMP1
+    |  li ITYPE, LJ_TSTR
     |  add NODE:TMP2, NODE:TMP2, TMP1	// node = tab->node + (idx*3*8)
-    |  settp STR:RC, LJ_TSTR		// Tagged key to look for.
+    |  settp STR:RC, ITYPE		// Tagged key to look for.
     |1:
     |  ld CARG1, NODE:TMP2->key
     |   ld CARG2, NODE:TMP2->val
@@ -4525,8 +4525,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_IFUNCV:
     |  // BASE = new base, RA = BASE+framesize*8, RB = LFUNC, RC = nargs*8
+    |   li ITYPE, LJ_TFUNC
     |  ld TMP2, L->maxstack
-    |   settp LFUNC:RB, LJ_TFUNC
+    |   settp LFUNC:RB, ITYPE
     |   add TMP1, BASE, RC
     |  add TMP0, RA, RC
     |   std LFUNC:RB, 0(TMP1)		// Store (tagged) copy of LFUNC.
