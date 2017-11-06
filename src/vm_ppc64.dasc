@@ -702,18 +702,18 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_dispatch:
   |  // BASE = meta base, RA = resultptr, RD = (nresults+1)*8
-  |  lwz TMP0, -12(BASE)		// Continuation.
+  |  ld TMP0, -32(BASE)			// Continuation.
   |   mr RB, BASE
   |   mr BASE, TMP2			// Restore caller BASE.
   |    ld LFUNC:TMP1, FRAME_FUNC(TMP2)
   |.if FFI
-  |  cmplwi TMP0, 1
+  |  cmpldi TMP0, 1
   |.endif
-  |     ld PC, -16(RB)			// Restore PC from [cont|PC].
+  |     ld PC, -24(RB)			// Restore PC from [cont|PC].
   |    cleartp LFUNC:TMP1
   |   subi TMP2, RD, 8
   |    ld TMP1, LFUNC:TMP1->pc
-  |   stwx TISNIL, RA, TMP2		// Ensure one valid arg.
+  |   stdx TISNIL, RA, TMP2		// Ensure one valid arg.
   |.if FFI
   |  ble >1
   |.endif
@@ -726,24 +726,24 @@ static void build_subroutines(BuildCtx *ctx)
   |1:
   |  beq ->cont_ffi_callback		// cont = 1: return from FFI callback.
   |  // cont = 0: tailcall from C function.
-  |  subi TMP1, RB, 16
+  |  subi TMP1, RB, 32
   |  sub RC, TMP1, BASE
   |  b ->vm_call_tail
   |.endif
   |
   |->cont_cat:				// RA = resultptr, RB = meta base
   |  lwz INS, -4(PC)
-  |   subi CARG2, RB, 16
+  |   subi CARG2, RB, 32
   |  decode_RB8 SAVE0, INS
-  |   lfd f0, 0(RA)
+  |   ld TMP0, 0(RA)
   |  add TMP1, BASE, SAVE0
   |   stp BASE, L->base
-  |  cmplw TMP1, CARG2
+  |  cmpld TMP1, CARG2
   |   sub CARG3, CARG2, TMP1
   |  decode_RA8 RA, INS
-  |   stfd f0, 0(CARG2)
+  |   std TMP0, 0(CARG2)
   |  bney ->BC_CAT_Z
-  |   stfdx f0, BASE, RA
+  |   stdx TMP0, BASE, RA
   |  b ->cont_nop
   |
   |//-- Table indexing metamethods -----------------------------------------
