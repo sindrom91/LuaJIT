@@ -819,29 +819,29 @@ static void build_subroutines(BuildCtx *ctx)
   |->vmeta_tsets1:
   |  la CARG3, DISPATCH_GL(tmptv)(DISPATCH)
   |  li TMP0, LJ_TSTR
+  |  settp STR:RC, TMP0
   |   decode_RB8 RB, INS
-  |  stw STR:RC, 4(CARG3)
+  |  std STR:RC, 0(CARG3)
   |   add CARG2, BASE, RB
-  |  stw TMP0, 0(CARG3)
   |  b >1
   |
   |->vmeta_tsets:
   |  la CARG2, DISPATCH_GL(tmptv)(DISPATCH)
-  |  li TMP0, LJ_TTAB
-  |  stw TAB:RB, 4(CARG2)
   |   la CARG3, DISPATCH_GL(tmptv2)(DISPATCH)
-  |  stw TMP0, 0(CARG2)
+  |  li TMP0, LJ_TTAB
   |   li TMP1, LJ_TSTR
-  |   stw STR:RC, 4(CARG3)
-  |   stw TMP1, 0(CARG3)
+  |  settp TAB:RB, TMP0
+  |   settp STR:RC, TMP1
+  |  std TAB:RB, 0(CARG2)
+  |   std STR:RC, 0(CARG3)
   |  b >1
   |
   |->vmeta_tsetb:			// TMP0 = index
   |   decode_RB8 RB, INS
   |  la CARG3, DISPATCH_GL(tmptv)(DISPATCH)
+  |  settp TMP0, TISNUM
   |   add CARG2, BASE, RB
-  |  stw TISNUM, 0(CARG3)
-  |  stw TMP0, 4(CARG3)
+  |  std TMP0, 0(CARG3)
   |  b >1
   |
   |->vmeta_tsetv:
@@ -855,23 +855,23 @@ static void build_subroutines(BuildCtx *ctx)
   |  std PC, SAVE_PC
   |  bl extern lj_meta_tset		// (lua_State *L, TValue *o, TValue *k)
   |  // Returns TValue * (finished) or NULL (metamethod).
-  |  cmplwi CRET1, 0
-  |   lfdx f0, BASE, RA
+  |  cmpldi CRET1, 0
+  |   ldx TMP0, BASE, RA
   |  beq >3
   |  // NOBARRIER: lj_meta_tset ensures the table is not black.
   |  ins_next1
-  |   stfd f0, 0(CRET1)
+  |   std TMP0, 0(CRET1)
   |  ins_next2
   |
   |3:  // Call __newindex metamethod.
   |  // BASE = base, L->top = new base, stack = cont/func/t/k/(v)
   |  subfic TMP1, BASE, FRAME_CONT
   |  lp BASE, L->top
-  |  std PC, -16(BASE)			// [cont|PC]
+  |  std PC, -24(BASE)			// [cont|PC]
   |   add PC, TMP1, BASE
   |  ld LFUNC:RB, FRAME_FUNC(BASE)	// Guaranteed to be a function here.
   |   li NARGS8:RC, 24			// 3 args for func(t, k, v)
-  |  stfd f0, 16(BASE)			// Copy value to third argument.
+  |  std TMP0, 16(BASE)			// Copy value to third argument.
   |  cleartp LFUNC:RB
   |  b ->vm_call_dispatch_f
   |
