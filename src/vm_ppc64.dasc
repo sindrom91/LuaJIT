@@ -581,7 +581,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    cmplwi TMP1, 0
   |   stw CARG3, SAVE_ERRF
   |   stp CARG3, SAVE_CFRAME
-  |   stw CARG1, SAVE_PC		// Any value outside of bytecode is ok.
+  |   std CARG1, SAVE_PC		// Any value outside of bytecode is ok.
   |  stp TMP0, L->cframe
   |    beq >3
   |
@@ -2235,7 +2235,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  // Returns ASMFunction.
   |  lp BASE, L->base
   |   lp TMP0, L->top
-  |   stw ZERO, SAVE_PC			// Invalidate for subsequent line hook.
+  |   std ZERO, SAVE_PC			// Invalidate for subsequent line hook.
   |  sub NARGS8:RC, TMP0, BASE
   |  add RA, BASE, RA
   |  ld LFUNC:RB, FRAME_FUNC(BASE)
@@ -2525,7 +2525,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  addi TMP0, sp, CFRAME_SPACE+8
   |  stw TMP0, CTSTATE->cb.stack
   |   mr CARG1, CTSTATE
-  |  stw CTSTATE, SAVE_PC		// Any value outside of bytecode is ok.
+  |  std CTSTATE, SAVE_PC		// Any value outside of bytecode is ok.
   |   mr CARG2, sp
   |  bl extern lj_ccallback_enter	// (CTState *cts, void *cf)
   |  // Returns lua_State *.
