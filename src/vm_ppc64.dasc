@@ -409,7 +409,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ld PC, FRAME_PC(TMP2)		// Fetch PC of previous frame.
   |  mr BASE, TMP2			// Restore caller base.
   |  // Prepending may overwrite the pcall frame, so do it at the end.
-  |   stwu TMP1, FRAME_PC(RA)		// Prepend true to results.
+  |   stdu TMP1, -8(RA)			// Prepend true to results.
   |
   |->vm_returnc:
   |  addi RD, RD, 8			// RD = (nresults+1)*8.
@@ -432,15 +432,15 @@ static void build_subroutines(BuildCtx *ctx)
   |  addic. TMP1, RD, -8
   |   stp TMP2, L->base
   |   lwz TMP2, SAVE_NRES
-  |    subi BASE, BASE, 8
+  |    subi BASE, BASE, 16
   |    st_vmstate
   |   slwi TMP2, TMP2, 3
   |  beq >2
   |1:
   |  addic. TMP1, TMP1, -8
-  |   lfd f0, 0(RA)
+  |   ld TMP0, 0(RA)
   |    addi RA, RA, 8
-  |   stfd f0, 0(BASE)
+  |   std TMP0, 0(BASE)
   |    addi BASE, BASE, 8
   |  bney <1
   |
@@ -463,9 +463,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  ble >7				// Less results wanted?
   |  // More results wanted. Check stack size and fill up results with nil.
   |  ld TMP1, L->maxstack
-  |  cmplw BASE, TMP1
+  |  cmpld BASE, TMP1
   |  bge >8
-  |  stw TISNIL, 0(BASE)
+  |  std TISNIL, 0(BASE)
   |  addi RD, RD, 8
   |  addi BASE, BASE, 8
   |  b <2
@@ -500,7 +500,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mr CRET1, CARG2
   |->vm_unwind_c_eh:			// Landing pad for external unwinder.
   |  ld L, SAVE_L
-  |  .toc ld TOCREG, SAVE_TOC
+  |  ld TOCREG, SAVE_TOC
   |   li TMP0, ~LJ_VMST_C
   |  ld GL:TMP1, L->glref
   |   stw TMP0, GL:TMP1->vmstate
@@ -508,14 +508,10 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->vm_unwind_ff:			// Unwind C stack, return from ff pcall.
   |  // (void *cframe)
-  |.if GPR64
   |  rldicr sp, CARG1, 0, 61
-  |.else
-  |  rlwinm sp, CARG1, 0, 0, 29
-  |.endif
   |->vm_unwind_ff_eh:			// Landing pad for external unwinder.
   |  ld L, SAVE_L
-  |  .toc ld TOCREG, SAVE_TOC
+  |  ld TOCREG, SAVE_TOC
   |     li TISNUM, LJ_TISNUM		// Setup type comparison constants.
   |  lp BASE, L->base
   |     lus TMP3, 0x59c0		// TOBIT = 2^52 + 2^51 (float).
@@ -523,7 +519,7 @@ static void build_subroutines(BuildCtx *ctx)
   |     li ZERO, 0
   |     stw TMP3, TMPD
   |  mov_false TMP1
-  |     ori TMP3, TMP3, 0x0004	// TONUM = 2^52 + 2^51 + 2^31 (float).
+  |     ori TMP3, TMP3, 0x0004		// TONUM = 2^52 + 2^51 + 2^31 (float).
   |     li TISNIL, LJ_TNIL
   |    li_vmstate INTERP
   |     lfs TOBIT, TMPD
@@ -531,7 +527,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  la RA, -8(BASE)			// Results start at BASE-8.
   |     stw TMP3, TMPD
   |   addi DISPATCH, DISPATCH, GG_G2DISP
-  |  stw TMP1, 0(RA)			// Prepend false to error message.
+  |  std TMP1, 0(RA)			// Prepend false to error message.
   |  li RD, 16				// 2 results: false + error message.
   |    st_vmstate
   |     lfs TONUM, TMPD
