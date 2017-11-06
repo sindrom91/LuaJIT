@@ -586,7 +586,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    beq >3
   |
   |  // Resume after yield (like a return).
-  |  stw L, DISPATCH_GL(cur_L)(DISPATCH)
+  |  std L, DISPATCH_GL(cur_L)(DISPATCH)
   |  mr RA, BASE
   |   lp BASE, L->base
   |     li TISNUM, LJ_TISNUM		// Setup type comparison constants.
@@ -1487,7 +1487,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  lp TMP3, L:SAVE0->top
   |    li_vmstate INTERP
   |  lp BASE, L->base
-  |    stw L, DISPATCH_GL(cur_L)(DISPATCH)
+  |    std L, DISPATCH_GL(cur_L)(DISPATCH)
   |    st_vmstate
   |   bgt >8
   |  sub RD, TMP3, TMP2
@@ -2338,7 +2338,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  savex_ 20,21,22,23
   |   lhz CARG4, 2(CARG3)		// Load trace number.
   |  savex_ 24,25,26,27
-  |  lwz L, DISPATCH_GL(cur_L)(DISPATCH)
+  |  ld L, DISPATCH_GL(cur_L)(DISPATCH)
   |  savex_ 28,29,30,31
   |   sub CARG3, TMP0, CARG3		// Compute exit number.
   |  lp BASE, DISPATCH_GL(jit_base)(DISPATCH)
