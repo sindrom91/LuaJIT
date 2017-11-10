@@ -1053,7 +1053,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  // BASE = old base, RA = new base, RC = nargs*8
   |  mr CARG1, L
   |   stp BASE, L->base
-  |  subi CARG2, RA, 8
+  |  subi CARG2, RA, 16
   |   std PC, SAVE_PC
   |  add CARG3, RA, RC
   |   mr SAVE0, NARGS8:RC
