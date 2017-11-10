@@ -896,7 +896,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  bl extern lj_meta_comp  // (lua_State *L, TValue *o1, *o2, int op)
   |  // Returns 0/1 or TValue * (metamethod).
   |3:
-  |  cmplwi CRET1, 1
+  |  cmpldi CRET1, 1
   |  bgt ->vmeta_binop
   |  subfic CRET1, CRET1, 0
   |4:
@@ -911,22 +911,22 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_ra:				// RA = resultptr
   |  lwz INS, -4(PC)
-  |   lfd f0, 0(RA)
+  |   ld TMP0, 0(RA)
   |  decode_RA8 TMP1, INS
-  |   stfdx f0, BASE, TMP1
+  |   stdx TMP0, BASE, TMP1
   |  b ->cont_nop
   |
   |->cont_condt:			// RA = resultptr
-  |  lwz TMP0, 0(RA)
-  |  .gpr64 extsw TMP0, TMP0
+  |  ld TMP0, 0(RA)
+  |  gettp TMP0, TMP0
   |  subfic TMP0, TMP0, LJ_TTRUE	// Branch if result is true.
   |  subfe CRET1, CRET1, CRET1
   |  not CRET1, CRET1
   |  b <4
   |
   |->cont_condf:			// RA = resultptr
-  |  lwz TMP0, 0(RA)
-  |  .gpr64 extsw TMP0, TMP0
+  |  ld TMP0, 0(RA)
+  |  gettp TMP0, TMP0
   |  subfic TMP0, TMP0, LJ_TTRUE	// Branch if result is false.
   |  subfe CRET1, CRET1, CRET1
   |  b <4
