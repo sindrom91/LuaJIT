@@ -1000,14 +1000,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  decode_OP1 CARG5, INS		// Caveat: CARG5 overlaps INS.
   |  bl extern lj_meta_arith  // (lua_State *L, TValue *ra,*rb,*rc, BCReg op)
   |  // Returns NULL (finished) or TValue * (metamethod).
-  |  cmplwi CRET1, 0
+  |  cmpldi CRET1, 0
   |  beq ->cont_nop
   |
   |  // Call metamethod for binary op.
   |->vmeta_binop:
   |  // BASE = old base, CRET1 = new base, stack = cont/func/o1/o2
   |  sub TMP1, CRET1, BASE
-  |   std PC, -16(CRET1)		// [cont|PC]
+  |   std PC, -24(CRET1)		// [cont|PC]
   |   mr TMP2, BASE
   |  addi PC, TMP1, FRAME_CONT
   |   mr BASE, CRET1
@@ -1025,7 +1025,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  bl extern lj_meta_len		// (lua_State *L, TValue *o)
   |  // Returns NULL (retry) or TValue * (metamethod base).
 #if LJ_52
-  |  cmplwi CRET1, 0
+  |  cmpldi CRET1, 0
   |  bne ->vmeta_binop			// Binop call for compatibility.
   |  mr CARG1, SAVE0
   |  b ->BC_LEN_Z
