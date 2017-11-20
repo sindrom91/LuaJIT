@@ -1097,8 +1097,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.macro .ffunc_1, name
   |->ff_ .. name:
   |  cmplwi NARGS8:RC, 8
-  |   lwz CARG3, 0(BASE)
-  |    lwz CARG1, 4(BASE)
+  |   ld CARG1, 0(BASE)
   |  blt ->fff_fallback
   |.endmacro
   |
@@ -1144,21 +1143,22 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: checks -----------------------------------------------
   |
   |.ffunc_1 assert
+  |  gettp TMP0, CARG1
   |  li TMP1, LJ_TFALSE
-  |   la RA, -8(BASE)
-  |  cmplw cr1, CARG3, TMP1
+  |   la RA, -16(BASE)
+  |  cmpld cr1, TMP0, TMP1
   |    ld PC, FRAME_PC(BASE)
   |  bge cr1, ->fff_fallback
-  |   stw CARG3, 0(RA)
   |  addi RD, NARGS8:RC, 8		// Compute (nresults+1)*8.
+  |  add TMP2, RA, RD
   |  addi TMP1, BASE, 8
-  |  add TMP2, RA, NARGS8:RC
-  |   stw CARG1, 4(RA)
+  |  cmpld BASE, TMP2
+  |   std CARG1, 0(RA)
   |  beq ->fff_res			// Done if exactly 1 argument.
   |1:
-  |  cmplw TMP1, TMP2
-  |   lfd f0, 0(TMP1)
-  |   stfd f0, 0(TMP1)
+  |  cmpld TMP1, TMP2
+  |   ld TMP0, 0(TMP1)
+  |   std TMP0, -16(TMP1)
   |    addi TMP1, TMP1, 8
   |  bney <1
   |  b ->fff_res
