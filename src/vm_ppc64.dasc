@@ -1180,52 +1180,55 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: getters and setters ---------------------------------
   |
   |.ffunc_1 getmetatable
-  |  checktab CARG3, >6
+  |  gettp ITYPE, CARG1
+  |  cmpdi cr0, ITYPE, LJ_TTAB
+  |  cmpdi cr1, ITYPE, LJ_TUDATA
+  |   cleartp TAB:CARG1, CARG1
+  |  cror 4*cr7+eq, 4*cr0+eq, 4*cr1+eq	// TODO: Did I get this right?
+  |  bne cr7, >6
   |1:  // Field metatable must be at same offset for GCtab and GCudata!
-  |  lwz TAB:CARG1, TAB:CARG1->metatable
+  |  ld TAB:RB, TAB:CARG1->metatable
   |2:
-  |  li CARG3, LJ_TNIL
-  |   cmplwi TAB:CARG1, 0
-  |  lwz STR:RC, DISPATCH_GL(gcroot[GCROOT_MMNAME+MM_metatable])(DISPATCH)
+  |  li CARG1, LJ_TNIL
+  |   cmpldi TAB:RB, 0
+  |  ld STR:RC, DISPATCH_GL(gcroot[GCROOT_MMNAME+MM_metatable])(DISPATCH)
   |   beq ->fff_restv
   |  lwz TMP0, TAB:CARG1->hmask
-  |   li CARG3, LJ_TTAB			// Use metatable as default result.
-  |  lwz TMP1, STR:RC->hash
-  |  lwz NODE:TMP2, TAB:CARG1->node
+  |   lwz TMP1, STR:RC->hash
+  |    ld NODE:TMP2, TAB:RB->node
   |  and TMP1, TMP1, TMP0		// idx = str->hash & tab->hmask
   |  slwi TMP0, TMP1, 5
   |  slwi TMP1, TMP1, 3
   |  sub TMP1, TMP0, TMP1
+  |   li CARG4, LJ_TSTR
   |  add NODE:TMP2, NODE:TMP2, TMP1	// node = tab->node + (idx*32-idx*8)
+  |   settp STR:RC, CARG4		// Tagged key to look for.
   |3:  // Rearranged logic, because we expect _not_ to find the key.
-  |  lwz CARG4, NODE:TMP2->key
-  |   lwz TMP0, 4+offsetof(Node, key)(NODE:TMP2)
-  |    lwz CARG2, NODE:TMP2->val
-  |     lwz TMP1, 4+offsetof(Node, val)(NODE:TMP2)
-  |  checkstr CARG4, >4
-  |   cmpw TMP0, STR:RC; beq >5
+  |  ld TMP0, NODE:TMP2->key
+  |   ld CARG1, NODE:TMP2->val
+  |    ld NODE:TMP2, NODE:TMP2->next
+  |  cmpld STR:RC, TMP0
+  |  beq >5
+  |  cmpldi NODE:TMP2, 0
+  |  bne <3
   |4:
-  |  lwz NODE:TMP2, NODE:TMP2->next
-  |  cmplwi NODE:TMP2, 0
-  |  beq ->fff_restv			// Not found, keep default result.
-  |  b <3
+  |  li TMP0, LJ_TTAB
+  |  mr TAB:CARG1, TAB:RB
+  |  settp TAB:CARG1, TMP0
+  |  b ->fff_restv			// Not found, keep default result.
   |5:
-  |  checknil CARG2
-  |  beq ->fff_restv			// Ditto for nil value.
-  |  mr CARG3, CARG2			// Return value of mt.__metatable.
-  |  mr CARG1, TMP1
-  |  b ->fff_restv
+  |  cmpld TMP0, TISNIL
+  |  bne ->fff_restv
+  |  b <4				// Ditto for nil value.
   |
   |6:
-  |  cmpwi CARG3, LJ_TUDATA; beq <1
-  |  .gpr64 extsw CARG3, CARG3
-  |  subfc TMP0, TISNUM, CARG3
-  |  subfe TMP2, CARG3, CARG3
+  |  subfc TMP0, TISNUM, ITYPE
+  |  subfe TMP2, ITYPE, ITYPE
   |  orc TMP1, TMP2, TMP0
   |  addi TMP1, TMP1, ~LJ_TISNUM+1
-  |  slwi TMP1, TMP1, 2
-  |   la TMP2, DISPATCH_GL(gcroot[GCROOT_BASEMT])(DISPATCH)
-  |  lwzx TAB:CARG1, TMP2, TMP1
+  |  sldi TMP1, TMP1, 3
+  |   la TMP2, DISPATCH_GL(gcroot[GCROOT_BASEMT])-8(DISPATCH)
+  |  ldx TAB:RB, TMP2, TMP1
   |  b <2
   |
   |.ffunc_2 setmetatable
