@@ -1441,10 +1441,11 @@ static void build_subroutines(BuildCtx *ctx)
   |.macro coroutine_resume_wrap, resume
   |.if resume
   |.ffunc_1 coroutine_resume
-  |  cmpwi CARG3, LJ_TTHREAD; bne ->fff_fallback
+  |  checktp CARG1, LJ_TTHREAD, ->fff_fallback
   |.else
   |.ffunc coroutine_wrap_aux
-  |  lwz L:CARG1, CFUNC:RB->upvalue[0].gcr
+  |  ld L:CARG1, CFUNC:RB->upvalue[0].gcr
+  |  cleartp L:CARG1
   |.endif
   |  lbz TMP0, L:CARG1->status
   |   lp TMP1, L:CARG1->cframe
@@ -1453,12 +1454,12 @@ static void build_subroutines(BuildCtx *ctx)
   |    lp TMP2, L:CARG1->base
   |   cmplwi cr1, TMP1, 0
   |   ld TMP0, L:CARG1->maxstack
-  |    cmplw cr7, CARG2, TMP2
+  |    cmpld cr7, CARG2, TMP2
   |   ld PC, FRAME_PC(BASE)
   |  crorc 4*cr6+lt, 4*cr0+gt, 4*cr1+eq		// st>LUA_YIELD || cframe!=0
   |   add TMP2, CARG2, NARGS8:RC
   |  crandc 4*cr6+gt, 4*cr7+eq, 4*cr0+eq	// base==top && st!=LUA_YIELD
-  |   cmplw cr1, TMP2, TMP0
+  |   cmpld cr1, TMP2, TMP0
   |  cror 4*cr6+lt, 4*cr6+lt, 4*cr6+gt
   |   std PC, SAVE_PC
   |  cror 4*cr6+lt, 4*cr6+lt, 4*cr1+gt		// cond1 || cond2 || stackov
@@ -1475,9 +1476,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  stp BASE, L->top
   |2:  // Move args to coroutine.
   |  cmpw TMP1, NARGS8:RC
-  |   lfdx f0, BASE, TMP1
+  |   ldx TMP0, BASE, TMP1
   |  beq >3
-  |   stfdx f0, CARG2, TMP1
+  |   stdx TMP0, CARG2, TMP1
   |  addi TMP1, TMP1, 8
   |  b <2
   |3:
@@ -1500,16 +1501,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmplwi RD, 0
   |   add TMP1, BASE, RD
   |  beq >6				// No results?
-  |  cmplw TMP1, TMP0
+  |  cmpld TMP1, TMP0
   |   li TMP1, 0
   |  bgt >9				// Need to grow stack?
   |
   |  subi TMP3, RD, 8
   |   stp TMP2, L:SAVE0->top		// Clear coroutine stack.
   |5:  // Move results from coroutine.
-  |  cmplw TMP1, TMP3
-  |   lfdx f0, TMP2, TMP1
-  |   stfdx f0, BASE, TMP1
+  |   ldx TMP0, TMP2, TMP1
+  |  cmpld TMP1, TMP3
+  |   stdx TMP0, BASE, TMP1
   |    addi TMP1, TMP1, 8
   |  bne <5
   |6:
@@ -1517,7 +1518,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.if resume
   |  mov_true TMP1
   |   la RA, -8(BASE)
-  |  stw TMP1, -8(BASE)			// Prepend true to results.
+  |  std TMP1, -8(BASE)			// Prepend true to results.
   |  addi RD, RD, 16
   |.else
   |  mr RA, BASE
@@ -1534,12 +1535,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  andix. TMP0, PC, FRAME_TYPE
   |  la TMP3, -8(TMP3)
   |   mov_false TMP1
-  |  lfd f0, 0(TMP3)
+  |  ld TMP0, 0(TMP3)
   |   stp TMP3, L:SAVE0->top		// Remove error from coroutine stack.
   |    li RD, (2+1)*8
-  |   stw TMP1, -8(BASE)		// Prepend false to results.
+  |   std TMP1, -8(BASE)		// Prepend false to results.
   |    la RA, -8(BASE)
-  |  stfd f0, 0(BASE)			// Copy error message.
+  |  std TMP0, 0(BASE)			// Copy error message.
   |  b <7
   |.else
   |  mr CARG1, L
