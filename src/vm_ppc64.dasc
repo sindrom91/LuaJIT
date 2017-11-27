@@ -1323,21 +1323,22 @@ static void build_subroutines(BuildCtx *ctx)
   |  b ->fff_res
   |
   |.ffunc_1 pairs
-  |  checktab CARG3, ->fff_fallback
+  |  checktp TMP1, CARG1, LJ_TTAB, ->fff_fallback
   |   ld PC, FRAME_PC(BASE)
 #if LJ_52
-  |   lwz TAB:TMP2, TAB:CARG1->metatable
-  |  lfd f0, CFUNC:RB->upvalue[0]
-  |   cmplwi TAB:TMP2, 0
-  |  la RA, -8(BASE)
+  |   ld TAB:TMP2, TAB:TMP1->metatable
+  |  ld CFUNC:TMP3, CFUNC:RB->upvalue[0]
+  |   cmpldi TAB:TMP2, 0
+  |  la RA, -16(BASE)
   |   bne ->fff_fallback
 #else
-  |  lfd f0, CFUNC:RB->upvalue[0]
-  |  la RA, -8(BASE)
+  |  ld CFUNC:TMP3, CFUNC:RB->upvalue[0]
+  |  la RA, -16(BASE)
 #endif
-  |   stw TISNIL, 8(BASE)
+  |  std CARG1, -8(BASE)
+  |   std TISNIL, 0(BASE)
+  |    std CFUNC:TMP3, 0(RA)
   |  li RD, (3+1)*8
-  |  stfd f0, 0(RA)
   |  b ->fff_res
   |
   |.ffunc ipairs_aux
