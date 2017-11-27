@@ -1278,10 +1278,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  // A __tostring method in the string base metatable is ignored.
   |  beq ->fff_restv			// String key?
   |  // Handle numbers inline, unless a number base metatable is present.
-  |   gettp ITYPE, CARG3
-  |  lwz TMP0, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM])(DISPATCH)
+  |  ld TMP0, DISPATCH_GL(gcroot[GCROOT_BASEMT_NUM])(DISPATCH)
   |   cmpdi ITYPE, LJ_TISNUM
-  |  cmplwi cr1, TMP0, 0
+  |  cmpldi cr1, TMP0, 0
   |   stp BASE, L->base			// Add frame since C call can throw.
   |  crorc 4*cr0+eq, 4*cr0+gt, 4*cr1+eq
   |   std PC, SAVE_PC			// Redundant (but a defined value).
@@ -1291,7 +1290,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  mr CARG2, BASE
   |  bl extern lj_strfmt_number		// (lua_State *L, cTValue *o)
   |  // Returns GCstr *.
-  |  li CARG3, LJ_TSTR
+  |  li TMP0, LJ_TSTR
+  |  settp CARG1, TMP0
   |  b ->fff_restv
   |
   |//-- Base library: iterators -------------------------------------------
