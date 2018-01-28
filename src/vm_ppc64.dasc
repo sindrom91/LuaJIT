@@ -1574,33 +1574,24 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Math library -------------------------------------------------------
   |
   |.ffunc_1 math_abs
-  |  checkint CARG3, >2
-  |  srawi TMP1, CARG1, 31
-  |  xor TMP2, TMP1, CARG1
-  |.if GPR64
+  |  gettp CARG2, CARG1
+  |  cmpdi CARG2, LJ_TISNUM
+  |  bgt ->fff_fallback
+  |  cleartp CARG1
+  |  bne ->fff_restv
+  |  extsw TMP1, CARG1
+  |  srawi TMP0, TMP1, 31
+  |  xor TMP1, TMP1, TMP0
   |  lus TMP0, 0x8000
-  |  sub CARG1, TMP2, TMP1
+  |  sub CARG1, TMP1, TMP0
   |  cmplw CARG1, TMP0
-  |  beq >1
-  |.else
-  |  sub. CARG1, TMP2, TMP1
-  |  blt >1
-  |.endif
-  |->fff_resi:
-  |  ld PC, FRAME_PC(BASE)
-  |  la RA, -8(BASE)
-  |  stw TISNUM, -8(BASE)
-  |  stw CRET1, -4(BASE)
-  |  b ->fff_res1
-  |1:
-  |  lus CARG3, 0x41e0	// 2^31.
-  |  li CARG1, 0
-  |  b ->fff_restv
-  |2:
-  |  bge ->fff_fallback
-  |  rlwinm CARG3, CARG3, 0, 1, 31
+  |  settp CARG1, TISNUM
+  |  bne ->fff_restv
+  |  lus CARG1, 0x41e0			// 2^31 as a double.
+  |  sldi CARG1, CARG1, 32
   |  // Fallthrough.
   |
+  |->fff_resi:	// TODO: Dummy label to avoid compilation errors.
   |->fff_restv:
   |  // CARG3/CARG1 = TValue result.
   |  ld PC, FRAME_PC(BASE)
