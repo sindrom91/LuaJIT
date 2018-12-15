@@ -2809,17 +2809,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQN: case BC_ISNEN:
     vk = op == BC_ISEQN;
     |  // RA = src*8, RD = num_const*8, JMP with RD = target
-    |  lwzux CARG1, RA, BASE
+    |  ldux CARG1, RA, BASE
+    |   ldux CARG2, RD, KBASE
     |    addi PC, PC, 4
-    |   lwz CARG2, 4(RA)
-    |  lwzux CARG3, RD, KBASE
-    |  gettp TMP0, CARG1
-    |  gettp TMP1, CARG3
+    |  gettp CARG3, CARG1
+    |   gettp CARG4, CARG2
     |    lwz SAVE0, -4(PC)
-    |  cmpdi cr0, TMP0, LJ_TISNUM
-    |  cmpdi cr1, TMP1, LJ_TISNUM
+    |  cmpld cr0, CARG3, TISNUM
     |    decode_RD4 SAVE0, SAVE0
-    |   lwz CARG4, 4(RD)
+    |   cmpld cr1, CARG4, TISNUM
     |    addis SAVE0, SAVE0, -(BCBIAS_J*4 >> 16)
     if (vk) {
       |->BC_ISEQN_Z:
@@ -2828,7 +2826,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |  bne cr0, >7
     |  bne cr1, >8
-    |   cmpw CARG2, CARG4
+    |   cmpw CARG1, CARG2
     |4:
     if (vk) {
       |  bne >1
