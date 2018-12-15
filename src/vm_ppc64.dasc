@@ -2874,9 +2874,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQP: case BC_ISNEP:
     vk = op == BC_ISEQP;
     |  // RA = src*8, RD = primitive_type*8 (~), JMP with RD = target
-    |  lwzx TMP0, BASE, RA
+    |  ldx TMP0, BASE, RA
     |   srwi TMP1, RD, 3
     |    lwz TMP2, 0(PC)
+    |  gettp TMP0, TMP0
     |   not TMP1, TMP1
     |    addi PC, PC, 4
     |.if FFI
@@ -2887,7 +2888,6 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  beq ->vmeta_equal_cd
     |.endif
     |    decode_RD4 TMP2, TMP2
-    |  .gpr64 extsw TMP0, TMP0
     |  addic TMP0, TMP0, -1
     |    addis TMP2, TMP2, -(BCBIAS_J*4 >> 16)
     |  subfe TMP1, TMP1, TMP1
@@ -3915,7 +3915,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_CALL:
     |  // RA = base*8, (RB = (nresults+1)*8,) RC = (nargs+1)*8
     |  mr TMP2, BASE			// Save old BASE for vmeta_call.
-    |  ldx LFUNC:RB, BASE, RA
+    |  ldux LFUNC:RB, BASE, RA
     |   subi NARGS8:RC, NARGS8:RC, 8
     |   addi BASE, BASE, 16
     |  checkfunc LFUNC:RB, ->vmeta_call
@@ -4241,7 +4241,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  bney ->BC_RETV_Z
     |
     |  lwz INS, -4(PC)
-    |   subi TMP2, BASE, 8
+    |   subi TMP2, BASE, 16
     |  decode_RB8 RB, INS
     if (op == BC_RET1) {
       |  ld TMP0, 0(RA)
