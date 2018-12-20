@@ -2776,22 +2776,22 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQS: case BC_ISNES:
     vk = op == BC_ISEQS;
     |  // RA = src*8, RD = str_const*8 (~), JMP with RD = target
-    |  lwzux TMP0, RA, BASE
-    |   srwi RD, RD, 1
-    |  lwz STR:TMP3, 4(RA)
+    |  ldx STR:CARG1, RA, BASE
     |    lwz TMP2, 0(PC)
-    |   subfic RD, RD, -4
+    |  gettp CARG3, STR:CARG1
+    |   sub RD, KBASE, RD
     |    addi PC, PC, 4
     |.if FFI
-    |  cmpwi TMP0, LJ_TCDATA
+    |  cmpdi CARG3, LJ_TCDATA
     |.endif
-    |   lwzx STR:TMP1, KBASE, RD	// KBASE-4-str_const*4
-    |  .gpr64 extsw TMP0, TMP0
-    |  subfic TMP0, TMP0, LJ_TSTR
+    |   li ITYPE, LJ_TSTR
+    |   ld STR:CARG2, -8(RD)		// KBASE-4-str_const*4
+    |  subfic TMP0, CARG3, LJ_TSTR
     |.if FFI
     |  beq ->vmeta_equal_cd
     |.endif
-    |  sub TMP1, STR:TMP1, STR:TMP3
+    |   settp STR:CARG2, ITYPE
+    |  sub TMP1, STR:CARG1, STR:CARG2
     |  or TMP0, TMP0, TMP1
     |    decode_RD4 TMP2, TMP2
     |  subfic TMP0, TMP0, 0
