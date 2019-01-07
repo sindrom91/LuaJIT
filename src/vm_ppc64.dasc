@@ -1233,16 +1233,19 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |.ffunc_2 setmetatable
   |  // Fast path: no mt for table yet and not clearing the mt.
-  |   checktab CARG3, ->fff_fallback
-  |  lwz TAB:TMP1, TAB:CARG1->metatable
-  |   checktab CARG4, ->fff_fallback
-  |  cmplwi TAB:TMP1, 0
-  |   lbz TMP3, TAB:CARG1->marked
+  |  checktp TAB:TMP1, CARG1, LJ_TTAB, ->fff_fallback
+  |   gettp TMP3, CARG2
+  |  ld TAB:TMP0, TAB:TMP1->metatable
+  |   cmpdi cr0, TMP3, LJ_TTAB
+  |  cmpdi cr1, TAB:TMP0, 0
+  |   lbz TMP2, TAB:TMP1->marked
+  |  cror 4*cr0+eq, 4*cr0+eq, 4*cr1+eq
+  |   cleartp TAB:CARG2
   |  bne ->fff_fallback
-  |   andix. TMP0, TMP3, LJ_GC_BLACK	// isblack(table)
-  |    stw TAB:CARG2, TAB:CARG1->metatable
+  |   andix. TMP0, TMP2, LJ_GC_BLACK	// isblack(table)
+  |    std TAB:CARG2, TAB:TMP1->metatable
   |   beq ->fff_restv
-  |  barrierback TAB:CARG1, TMP3, TMP0
+  |  barrierback TAB:TMP1, TMP2, TMP0
   |  b ->fff_restv
   |
   |.ffunc rawget
