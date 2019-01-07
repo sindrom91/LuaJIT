@@ -2704,17 +2704,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQV: case BC_ISNEV:
     vk = op == BC_ISEQV;
     |  // RA = src1*8, RD = src2*8, JMP with RD = target
-    |  lwzux CARG1, RA, BASE
+    |  ldx CARG1, RA, BASE
+    |   ldx CARG2, RD, BASE
     |    addi PC, PC, 4
-    |   lwz CARG2, 4(RA)
-    |  lwzux CARG3, RD, BASE
-    |  gettp TMP0, CARG1
-    |  gettp TMP1, CARG3
+    |  gettp CARG3, CARG1
+    |   gettp CARG4, CARG2
     |    lwz SAVE0, -4(PC)
-    |  cmpdi cr0, TMP0, LJ_TISNUM
-    |  cmpdi cr1, TMP1, LJ_TISNUM
+    |  cmpld cr0, CARG3, TISNUM
+    |   cmpld cr1, CARG4, TISNUM
     |    decode_RD4 SAVE0, SAVE0
-    |   lwz CARG4, 4(RD)
     |  cror 4*cr7+gt, 4*cr0+gt, 4*cr1+gt
     |    addis SAVE0, SAVE0, -(BCBIAS_J*4 >> 16)
     if (vk) {
@@ -2724,52 +2722,47 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |5:  // Either or both types are not numbers.
     |.if FFI
-    |  cmpwi cr7, CARG1, LJ_TCDATA
-    |  cmpwi cr5, CARG3, LJ_TCDATA
+    |  cmpwi cr7, CARG3, LJ_TCDATA
+    |   cmpwi cr5, CARG4, LJ_TCDATA
     |.endif
-    |   not TMP2, CARG1
-    |  cmplw CARG1, CARG3
-    |   cmplwi cr1, TMP2, ~LJ_TISPRI		// Primitive?
+    |  cmpld cr0, CARG1, CARG2
     |.if FFI
     |  cror 4*cr7+eq, 4*cr7+eq, 4*cr5+eq
-    |.endif
-    |   cmplwi cr6, TMP2, ~LJ_TISTABUD		// Table or userdata?
-    |.if FFI
     |  beq cr7, ->vmeta_equal_cd
     |.endif
-    |    cmplw cr5, CARG2, CARG4
-    |  crandc 4*cr0+gt, 4*cr0+eq, 4*cr1+gt	// 2: Same type and primitive.
-    |  crorc 4*cr0+lt, 4*cr5+eq, 4*cr0+eq	// 1: Same tv or different type.
-    |  crand 4*cr0+eq, 4*cr0+eq, 4*cr5+eq	// 0: Same type and same tv.
-    |   mr SAVE1, PC
-    |  cror 4*cr0+eq, 4*cr0+eq, 4*cr0+gt	// 0 or 2.
-    |  cror 4*cr0+lt, 4*cr0+lt, 4*cr0+gt	// 1 or 2.
+    |  bne cr0, >2
     if (vk) {
-      |  bne cr0, >6
+      |->BC_ISEQV_Z:
       |  add PC, PC, SAVE0
-      |6:
-    } else {
-      |  beq cr0, >6
-      |  add PC, PC, SAVE0
-      |6:
     }
-    |  bge cr0, >2			// Done if 1 or 2.
-    |1:
+    |6:
     |  ins_next
+    |
     |2:
-    |  blt cr6, <1			// Done if not tab/ud.
+    |  not TMP2, CARG3
+    |  cmpld cr0, CARG3, CARG4		// Same type?
+    |  cmpldi cr1, TMP2, ~LJ_TISTABUD	// Table or userdata?
+    |
+    |  // Done if not same type or not tab/ud.
+    if (vk) {
+      |  bne cr0, <6
+      |  ble cr1, <6
+    } else {
+      |  // Reuse code from opposite instruction.
+      |  bne cr0, ->BC_ISEQV_Z
+      |  ble cr1, ->BC_ISEQV_Z
+    }
     |
     |  // Different tables or userdatas. Need to check __eq metamethod.
     |  // Field metatable must be at same offset for GCtab and GCudata!
-    |   mr CARG3, CARG4
-    |  lwz TAB:TMP2, TAB:CARG2->metatable
+    |  cleartp TAB:TMP1, CARG1
+    |  ld TAB:TMP2, TAB:TMP1->metatable
     |   li CARG4, 1-vk			// ne = 0 or 1.
-    |  cmplwi TAB:TMP2, 0
-    |  beq <1				// No metatable?
+    |  cmpldi TAB:TMP2, 0
+    |  beq <6				// No metatable?
     |  lbz TMP2, TAB:TMP2->nomm
     |  andix. TMP2, TMP2, 1<<MM_eq
-    |  bne <1				// Or 'no __eq' flag set?
-    |  mr PC, SAVE1			// Restore old PC.
+    |  bne <6				// Or 'no __eq' flag set?
     |  b ->vmeta_equal			// Handle __eq metamethod.
     break;
 
