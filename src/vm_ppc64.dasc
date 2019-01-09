@@ -3475,21 +3475,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_FNEW:
     |  // RA = dst*8, RD = proto_const*8 (~) (holding function prototype)
-    |  srwi TMP1, RD, 1
-    |   stp BASE, L->base
-    |  subfic TMP1, TMP1, -4
+    |   std BASE, L->base
+    |  subfic RD, RD, -8
     |  ld LFUNC:CARG3, FRAME_FUNC(BASE)
     |   std PC, SAVE_PC
-    |    lwzx CARG2, KBASE, TMP1	// KBASE-4-tab_const*4
+    |    ldx CARG2, KBASE, RD		// KBASE-8-tab_const*8
     |   mr CARG1, L
     |  cleartp LFUNC:CARG3
     |  // (lua_State *L, GCproto *pt, GCfuncL *parent)
     |  bl extern lj_func_newL_gc
     |  // Returns GCfuncL *.
-    |  lp BASE, L->base
-    |   li TMP0, LJ_TFUNC
-    |  stwux TMP0, RA, BASE
-    |  stw LFUNC:CRET1, 4(RA)
+    |   li ITYPE, LJ_TFUNC
+    |  ld BASE, L->base
+    |   settp LFUNC:CRET1, ITYPE
+    |  stdx LFUNC:CRET1, RA, BASE
     |  ins_next
     break;
 
@@ -3514,8 +3513,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  bl extern lj_tab_new  // (lua_State *L, int32_t asize, uint32_t hbits)
       |  // Returns Table *.
     } else {
-      |  sub TMP1, KBASE, RD
-      |  ld CARG2, -8(TMP1)		// KBASE-8-tab_const*8
+      |  subfic RD, RD, -8
+      |  ldx CARG2, KBASE, RD 		// KBASE-8-tab_const*8
       |  bl extern lj_tab_dup  // (lua_State *L, Table *kt)
       |  // Returns Table *.
     }
