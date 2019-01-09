@@ -3501,7 +3501,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld TMP0, DISPATCH_GL(gc.total)(DISPATCH)
     |   mr CARG1, L
     |  ld TMP1, DISPATCH_GL(gc.threshold)(DISPATCH)
-    |   stp BASE, L->base
+    |   std BASE, L->base
     |  cmpld TMP0, TMP1
     |   std PC, SAVE_PC
     |  bge >5
@@ -3514,15 +3514,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  bl extern lj_tab_new  // (lua_State *L, int32_t asize, uint32_t hbits)
       |  // Returns Table *.
     } else {
-      |  neg TMP1, TMP1
-      |  ldx CARG2, KBASE, TMP1		// KBASE-tab_const*8
+      |  sub TMP1, KBASE, RD
+      |  ld CARG2, -8(TMP1)		// KBASE-8-tab_const*8
       |  bl extern lj_tab_dup  // (lua_State *L, Table *kt)
       |  // Returns Table *.
     }
     |  li ITYPE, LJ_TTAB
+    |   ld BASE, L->base
     |  settp CRET1, ITYPE
-    |  lp BASE, L->base
-    |  stdx CRET1, RA, BASE
+    |   stdx CRET1, RA, BASE
     |  ins_next
     if (op == BC_TNEW) {
       |3:
