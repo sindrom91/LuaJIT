@@ -1237,7 +1237,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   cmpdi cr0, TMP3, LJ_TTAB
   |  cmpdi cr1, TAB:TMP0, 0
   |   lbz TMP2, TAB:TMP1->marked
-  |  cror 4*cr0+eq, 4*cr0+eq, 4*cr1+eq
+  |  cror 4*cr0+eq, 4*cr0+eq, 4*cr1+eq  // TODO: This isn't right.
   |   cleartp TAB:CARG2
   |  bne ->fff_fallback
   |   andix. TMP0, TMP2, LJ_GC_BLACK	// isblack(table)
