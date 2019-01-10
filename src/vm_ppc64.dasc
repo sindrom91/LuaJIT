@@ -1132,9 +1132,9 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |// Inlined GC threshold check. Caveat: uses TMP0 and TMP1.
   |.macro ffgccheck
-  |  lwz TMP0, DISPATCH_GL(gc.total)(DISPATCH)
-  |  lwz TMP1, DISPATCH_GL(gc.threshold)(DISPATCH)
-  |  cmplw TMP0, TMP1
+  |  ld TMP0, DISPATCH_GL(gc.total)(DISPATCH)
+  |  ld TMP1, DISPATCH_GL(gc.threshold)(DISPATCH)
+  |  cmpld TMP0, TMP1
   |  bgel ->fff_gcstep
   |.endmacro
   |
