@@ -1112,7 +1112,7 @@ static void build_subroutines(BuildCtx *ctx)
   |.macro .ffunc_n, name
   |->ff_ .. name:
   |  cmplwi NARGS8:RC, 8
-  |   lwz CARG1, 0(BASE)
+  |   ld CARG1, 0(BASE)
   |    lfd FARG1, 0(BASE)
   |  blt ->fff_fallback
   |  checknum CARG1, ->fff_fallback
@@ -1121,13 +1121,13 @@ static void build_subroutines(BuildCtx *ctx)
   |.macro .ffunc_nn, name
   |->ff_ .. name:
   |  cmplwi NARGS8:RC, 16
-  |   lwz CARG1, 0(BASE)
+  |   ld CARG1, 0(BASE)
   |    lfd FARG1, 0(BASE)
-  |   lwz CARG3, 8(BASE)
+  |   ld CARG2, 8(BASE)
   |    lfd FARG2, 8(BASE)
   |  blt ->fff_fallback
   |  checknum CARG1, ->fff_fallback
-  |  checknum CARG3, ->fff_fallback
+  |  checknum CARG2, ->fff_fallback
   |.endmacro
   |
   |// Inlined GC threshold check. Caveat: uses TMP0 and TMP1.
