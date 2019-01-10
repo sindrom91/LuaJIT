@@ -1104,10 +1104,8 @@ static void build_subroutines(BuildCtx *ctx)
   |.macro .ffunc_2, name
   |->ff_ .. name:
   |  cmplwi NARGS8:RC, 16
-  |   lwz CARG3, 0(BASE)
-  |    lwz CARG4, 8(BASE)
-  |   lwz CARG1, 4(BASE)
-  |    lwz CARG2, 12(BASE)
+  |   ld CARG1, 0(BASE)
+  |    ld CARG2, 8(BASE)
   |  blt ->fff_fallback
   |.endmacro
   |
@@ -1596,11 +1594,10 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->fff_resi:	// TODO: Dummy label to avoid compilation errors.
   |->fff_restv:
-  |  // CARG3/CARG1 = TValue result.
+  |  // CARG1 = TValue result.
   |  ld PC, FRAME_PC(BASE)
-  |   stw CARG3, -8(BASE)
-  |  la RA, -8(BASE)
-  |   stw CARG1, -4(BASE)
+  |  la RA, -16(BASE)
+  |   std CARG1, -16(BASE)
   |->fff_res1:
   |  // RA = results, PC = return.
   |  li RD, (1+1)*8
@@ -1623,7 +1620,7 @@ static void build_subroutines(BuildCtx *ctx)
   |6:  // Fill up results with nil.
   |  subi TMP1, RD, 8
   |   addi RD, RD, 8
-  |  stwx TISNIL, RA, TMP1
+  |  stdx TISNIL, RA, TMP1
   |  b <5
   |
   |.macro math_extern, func
