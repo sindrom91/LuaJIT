@@ -933,6 +933,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->vmeta_equal:
   |  // CARG2, CARG3, CARG4 are already set by BC_ISEQV/BC_ISNEV.
+  |  cleartp TAB:CARG3
   |  subi PC, PC, 4
   |   stp BASE, L->base
   |  mr CARG1, L
@@ -2704,14 +2705,14 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQV: case BC_ISNEV:
     vk = op == BC_ISEQV;
     |  // RA = src1*8, RD = src2*8, JMP with RD = target
-    |  ldx CARG1, RA, BASE
-    |   ldx CARG2, RD, BASE
+    |  ldx CARG2, RA, BASE
+    |   ldx CARG3, RD, BASE
     |    addi PC, PC, 4
-    |  gettp CARG3, CARG1
-    |   gettp CARG4, CARG2
+    |  gettp TMP0, CARG2
+    |   gettp TMP1, CARG3
     |    lwz SAVE0, -4(PC)
-    |  cmpld cr0, CARG3, TISNUM
-    |   cmpld cr1, CARG4, TISNUM
+    |  cmpld cr0, TMP0, TISNUM
+    |   cmpld cr1, TMP1, TISNUM
     |    decode_RD4 SAVE0, SAVE0
     |  cror 4*cr7+gt, 4*cr0+gt, 4*cr1+gt
     |    addis SAVE0, SAVE0, -(BCBIAS_J*4 >> 16)
@@ -2722,10 +2723,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |5:  // Either or both types are not numbers.
     |.if FFI
-    |  cmpwi cr7, CARG3, LJ_TCDATA
-    |   cmpwi cr5, CARG4, LJ_TCDATA
+    |  cmpwi cr7, TMP0, LJ_TCDATA
+    |   cmpwi cr5, TMP1, LJ_TCDATA
     |.endif
-    |  cmpld cr0, CARG1, CARG2
+    |  cmpld cr0, CARG2, CARG3
     |.if FFI
     |  cror 4*cr7+eq, 4*cr7+eq, 4*cr5+eq
     |  beq cr7, ->vmeta_equal_cd
@@ -2739,24 +2740,24 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |
     |2:
-    |  not TMP2, CARG3
-    |  cmpld cr0, CARG3, CARG4		// Same type?
+    |  not TMP2, TMP0
+    |  cmpld cr0, TMP0, TMP1		// Same type?
     |  cmpldi cr1, TMP2, ~LJ_TISTABUD	// Table or userdata?
     |
     |  // Done if not same type or not tab/ud.
     if (vk) {
       |  bne cr0, <6
-      |  ble cr1, <6
+      |  blt cr1, <6
     } else {
       |  // Reuse code from opposite instruction.
       |  bne cr0, ->BC_ISEQV_Z
-      |  ble cr1, ->BC_ISEQV_Z
+      |  blt cr1, ->BC_ISEQV_Z
     }
     |
     |  // Different tables or userdatas. Need to check __eq metamethod.
     |  // Field metatable must be at same offset for GCtab and GCudata!
-    |  cleartp TAB:TMP1, CARG1
-    |  ld TAB:TMP2, TAB:TMP1->metatable
+    |  cleartp TAB:CARG2
+    |  ld TAB:TMP2, TAB:CARG2->metatable
     |   li CARG4, 1-vk			// ne = 0 or 1.
     |  cmpldi TAB:TMP2, 0
     |  beq <6				// No metatable?
