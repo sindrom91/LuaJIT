@@ -2705,8 +2705,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQV: case BC_ISNEV:
     vk = op == BC_ISEQV;
     |  // RA = src1*8, RD = src2*8, JMP with RD = target
-    |  ldx CARG2, RA, BASE
-    |   ldx CARG3, RD, BASE
+    |  ldux CARG2, RA, BASE
+    |   ldux CARG3, RD, BASE
     |    addi PC, PC, 4
     |  gettp TMP0, CARG2
     |   gettp TMP1, CARG3
@@ -2803,15 +2803,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_ISEQN: case BC_ISNEN:
     vk = op == BC_ISEQN;
     |  // RA = src*8, RD = num_const*8, JMP with RD = target
-    |  ldux CARG1, RA, BASE
-    |   ldux CARG2, RD, KBASE
+    |  ldux CARG2, RA, BASE
+    |   ldux CARG3, RD, KBASE
     |    addi PC, PC, 4
-    |  gettp CARG3, CARG1
-    |   gettp CARG4, CARG2
+    |  gettp TMP0, CARG2
+    |   gettp TMP1, CARG3
     |    lwz SAVE0, -4(PC)
-    |  cmpld cr0, CARG3, TISNUM
+    |  cmpld cr0, TMP0, TISNUM
     |    decode_RD4 SAVE0, SAVE0
-    |   cmpld cr1, CARG4, TISNUM
+    |   cmpld cr1, TMP1, TISNUM
     |    addis SAVE0, SAVE0, -(BCBIAS_J*4 >> 16)
     if (vk) {
       |->BC_ISEQN_Z:
@@ -2820,7 +2820,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |  bne cr0, >7
     |  bne cr1, >8
-    |   cmpw CARG1, CARG2
+    |   cmpw CARG2, CARG3
     |4:
     if (vk) {
       |  bne >1
@@ -2841,7 +2841,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ins_next
     |.if FFI
     |3:
-    |  cmpwi CARG1, LJ_TCDATA
+    |  cmpwi CARG2, LJ_TCDATA
     |  beq ->vmeta_equal_cd
     |  b <1
     |.endif
@@ -2851,7 +2851,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   lfd f0, 0(RA)
     |  blt cr1, >1
     |  // RA is a number, RD is an integer.
-    |  tonum_i f1, CARG4
+    |  tonum_i f1, CARG3
     |  b >2
     |
     |8: // RA is an integer, RD is a number.
@@ -3586,7 +3586,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     break;
   case BC_TGETS:
     |  // RA = dst*8, RB = table*8, RC = str_const*8 (~)
-    |  ldux TAB:RB, RB, BASE
+    |  ldx TAB:RB, BASE, RB
     |   subfic RC, RC, -8
     |  checktab TAB:RB, ->vmeta_tgets1
     |   ldx STR:RC, KBASE, RC		// KBASE-8-str_const*8
@@ -4505,7 +4505,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     }
     |
     |3:  // Clear missing parameters.
-    |  stwx TISNIL, BASE, NARGS8:RC
+    |  stdx TISNIL, BASE, NARGS8:RC
     |  addi NARGS8:RC, NARGS8:RC, 8
     |  b <2
     break;
