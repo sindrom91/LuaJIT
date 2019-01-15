@@ -2760,10 +2760,17 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ld TAB:TMP2, TAB:CARG2->metatable
     |   li CARG4, 1-vk			// ne = 0 or 1.
     |  cmpldi TAB:TMP2, 0
-    |  beq <6				// No metatable?
-    |  lbz TMP2, TAB:TMP2->nomm
-    |  andix. TMP2, TMP2, 1<<MM_eq
-    |  bne <6				// Or 'no __eq' flag set?
+    if (vk) {
+      |  beq <6				// No metatable?
+      |  lbz TMP2, TAB:TMP2->nomm
+      |  andix. TMP2, TMP2, 1<<MM_eq
+      |  bne <6				// Or 'no __eq' flag set?
+    } else {
+      |  beq ->BC_ISEQV_Z		// No metatable?
+      |  lbz TMP2, TAB:TMP2->nomm
+      |  andix. TMP2, TMP2, 1<<MM_eq
+      |  beq ->BC_ISEQV_Z		// Or 'no __eq' flag set?
+    }
     |  b ->vmeta_equal			// Handle __eq metamethod.
     break;
 
