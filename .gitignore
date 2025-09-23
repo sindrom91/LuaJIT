@@ -9,3 +9,5 @@
 *.dmp
 *.swp
 .tags
+.zig-cache
+zig-out
