@@ -16,13 +16,7 @@ pub fn build(b: *std.Build) void {
 
     const genBuildvmArch = b.addRunArtifact(minilua);
     genBuildvmArch.addFileArg(b.path("dynasm/dynasm.lua"));
-    genBuildvmArch.addArg("-D");
-    genBuildvmArch.addArg("JIT");
-    genBuildvmArch.addArg("-D");
-    genBuildvmArch.addArg("WIN");
-    genBuildvmArch.addArg("-D");
-    genBuildvmArch.addArg("FPU");
-    genBuildvmArch.addArg("-o");
+    genBuildvmArch.addArgs(&.{ "-D", "JIT", "-D", "WIN", "-D", "FPU", "-o" });
     const buildvmArch = genBuildvmArch.addOutputFileArg("generated/buildvm_arch.h");
     genBuildvmArch.addFileArg(b.path("src/vm_x64.dasc"));
 
@@ -60,16 +54,12 @@ pub fn build(b: *std.Build) void {
     buildvm.step.dependOn(&genVersion.step);
 
     const genFolddef = b.addRunArtifact(buildvm);
-    genFolddef.addArg("-m");
-    genFolddef.addArg("folddef");
-    genFolddef.addArg("-o");
+    genFolddef.addArgs(&.{ "-m", "folddef", "-o" });
     const folddef = genFolddef.addOutputFileArg("generated/lj_folddef.h");
     genFolddef.addFileArg(b.path("src/lj_opt_fold.c"));
 
     const genLibdef = b.addRunArtifact(buildvm);
-    genLibdef.addArg("-m");
-    genLibdef.addArg("libdef");
-    genLibdef.addArg("-o");
+    genLibdef.addArgs(&.{ "-m", "libdef", "-o" });
     const libdef = genLibdef.addOutputFileArg("generated/lj_libdef.h");
     const all_libs = [_][]const u8{
         "src/lib_base.c",
@@ -88,30 +78,22 @@ pub fn build(b: *std.Build) void {
     for (all_libs) |lib| genLibdef.addFileArg(b.path(lib));
 
     const genFfdef = b.addRunArtifact(buildvm);
-    genFfdef.addArg("-m");
-    genFfdef.addArg("ffdef");
-    genFfdef.addArg("-o");
+    genFfdef.addArgs(&.{ "-m", "ffdef", "-o" });
     const ffdef = genFfdef.addOutputFileArg("generated/lj_ffdef.h");
     for (all_libs) |lib| genFfdef.addFileArg(b.path(lib));
 
     const genBcdef = b.addRunArtifact(buildvm);
-    genBcdef.addArg("-m");
-    genBcdef.addArg("bcdef");
-    genBcdef.addArg("-o");
+    genBcdef.addArgs(&.{ "-m", "bcdef", "-o" });
     const bcdef = genBcdef.addOutputFileArg("generated/lj_bcdef.h");
     for (all_libs) |lib| genBcdef.addFileArg(b.path(lib));
 
     const genRecdef = b.addRunArtifact(buildvm);
-    genRecdef.addArg("-m");
-    genRecdef.addArg("recdef");
-    genRecdef.addArg("-o");
+    genRecdef.addArgs(&.{ "-m", "recdef", "-o" });
     const recdef = genRecdef.addOutputFileArg("generated/lj_recdef.h");
     for (all_libs) |lib| genRecdef.addFileArg(b.path(lib));
 
     const genLjvm = b.addRunArtifact(buildvm);
-    genLjvm.addArg("-m");
-    genLjvm.addArg("peobj");
-    genLjvm.addArg("-o");
+    genLjvm.addArgs(&.{ "-m", "peobj", "-o" });
     const ljvm = genLjvm.addOutputFileArg("generated/lj_vm.obj");
 
     const libluajit = b.addLibrary(.{
