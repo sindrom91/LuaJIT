@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     minilua.linkLibC();
-    minilua.addCSourceFile(.{ .file = b.path("src/host/minilua.c"), .flags = &.{} });
+    minilua.addCSourceFile(.{ .file = b.path("src/host/minilua.c") });
 
     const genBuildvmArch = b.addRunArtifact(minilua);
     genBuildvmArch.addFileArg(b.path("dynasm/dynasm.lua"));
@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
         "src/host/buildvm_lib.c",
         "src/host/buildvm_fold.c",
     };
-    for (buildvmSources) |f| buildvm.addCSourceFile(.{ .file = b.path(f), .flags = &.{} });
+    for (buildvmSources) |f| buildvm.addCSourceFile(.{ .file = b.path(f) });
     buildvm.addIncludePath(b.path("src"));
     buildvm.addIncludePath(b.path("src/host"));
     buildvm.addIncludePath(buildvmArch.dirname());
@@ -175,7 +175,7 @@ pub fn build(b: *std.Build) void {
         "src/lib_ffi.c",
         "src/lib_init.c",
     };
-    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = &.{} });
+    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f) });
     libluajit.addCSourceFile(.{ .file = ljvm, .flags = &.{} });
     libluajit.addIncludePath(b.path("src"));
     libluajit.addIncludePath(b.path("src/host"));
@@ -202,7 +202,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     luajit.linkLibC();
-    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = &.{} });
+    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c") });
     luajit.addIncludePath(b.path("src"));
     luajit.addIncludePath(luajith.dirname());
     luajit.linkLibrary(libluajit);
