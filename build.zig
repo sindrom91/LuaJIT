@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     const minilua = b.addExecutable(.{
         .name = "minilua",
         .root_module = b.createModule(.{
-            .target = target,
+            .target = b.graph.host, // This is always executed on the host system!
             .optimize = std.builtin.OptimizeMode.ReleaseFast, // TODO: Does not work in Debug.
         }),
     });
@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
     const buildvm = b.addExecutable(.{
         .name = "buildvm",
         .root_module = b.createModule(.{
-            .target = target,
+            .target = b.graph.host, // This is always executed on the host system!
             .optimize = std.builtin.OptimizeMode.ReleaseFast, // TODO: Does not work in Debug.
         }),
     });
