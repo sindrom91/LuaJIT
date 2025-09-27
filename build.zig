@@ -96,6 +96,9 @@ pub fn build(b: *std.Build) void {
     genLjvm.addArgs(&.{ "-m", "peobj", "-o" });
     const ljvm = genLjvm.addOutputFileArg("generated/lj_vm.obj");
 
+    var cflags: std.ArrayList([]const u8) = .empty;
+    cflags.append(b.allocator, "-DLUAJIT_UNWIND_EXTERNAL") catch unreachable;
+
     const libluajit = b.addLibrary(.{
         .name = "libluajit",
         .linkage = .static,
@@ -175,8 +178,8 @@ pub fn build(b: *std.Build) void {
         "src/lib_ffi.c",
         "src/lib_init.c",
     };
-    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f) });
-    libluajit.addCSourceFile(.{ .file = ljvm, .flags = &.{} });
+    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags.items });
+    libluajit.addCSourceFile(.{ .file = ljvm, .flags = cflags.items });
     libluajit.addIncludePath(b.path("src"));
     libluajit.addIncludePath(b.path("src/host"));
     libluajit.addIncludePath(folddef.dirname());
@@ -202,7 +205,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     luajit.linkLibC();
-    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c") });
+    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags.items });
     luajit.addIncludePath(b.path("src"));
     luajit.addIncludePath(luajith.dirname());
     luajit.linkLibrary(libluajit);
