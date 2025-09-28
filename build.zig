@@ -179,7 +179,7 @@ pub fn build(b: *std.Build) void {
         "src/lib_init.c",
     };
     for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags.items });
-    libluajit.addCSourceFile(.{ .file = ljvm, .flags = cflags.items });
+    libluajit.addObjectFile(ljvm);
     libluajit.addIncludePath(b.path("src"));
     libluajit.addIncludePath(b.path("src/host"));
     libluajit.addIncludePath(folddef.dirname());
