@@ -16,7 +16,11 @@ pub fn build(b: *std.Build) void {
 
     const genBuildvmArch = b.addRunArtifact(minilua);
     genBuildvmArch.addFileArg(b.path("dynasm/dynasm.lua"));
-    genBuildvmArch.addArgs(&.{ "-D", "JIT", "-D", "WIN", "-D", "FPU", "-o" });
+    genBuildvmArch.addArgs(&.{ "-D", "JIT" });
+    if (target.result.os.tag == .windows) {
+        genBuildvmArch.addArgs(&.{ "-D", "WIN" });
+    }
+    genBuildvmArch.addArgs(&.{ "-D", "FPU", "-o" });
     const buildvmArch = genBuildvmArch.addOutputFileArg("generated/buildvm_arch.h");
     genBuildvmArch.addFileArg(b.path("src/vm_x64.dasc"));
 
