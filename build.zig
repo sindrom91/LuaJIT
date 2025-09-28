@@ -215,5 +215,9 @@ pub fn build(b: *std.Build) void {
     luajit.linkLibrary(libluajit);
     luajit.step.dependOn(&genVersion.step);
 
+    if (target.result.os.tag == .linux) {
+        luajit.linkSystemLibrary("unwind");
+    }
+
     b.installArtifact(luajit);
 }
