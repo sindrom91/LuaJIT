@@ -96,9 +96,19 @@ pub fn build(b: *std.Build) void {
     const recdef = genRecdef.addOutputFileArg("generated/lj_recdef.h");
     for (all_libs) |lib| genRecdef.addFileArg(b.path(lib));
 
+    var ljvmMode: []const u8 = undefined;
+    switch (target.result.os.tag) {
+        .windows => ljvmMode = "peobj",
+        .linux => ljvmMode = "elfasm",
+        .macos => ljvmMode = "machasm",
+        else => unreachable,
+    }
+
     const genLjvm = b.addRunArtifact(buildvm);
-    genLjvm.addArgs(&.{ "-m", "peobj", "-o" });
-    const ljvm = genLjvm.addOutputFileArg("generated/lj_vm.obj");
+    genLjvm.addArgs(&.{ "-m", ljvmMode, "-o" });
+    const ljvm = genLjvm.addOutputFileArg(
+        if (target.result.os.tag == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
+    );
 
     var cflags: std.ArrayList([]const u8) = .empty;
     cflags.append(b.allocator, "-DLUAJIT_UNWIND_EXTERNAL") catch unreachable;
@@ -183,7 +193,11 @@ pub fn build(b: *std.Build) void {
         "src/lib_init.c",
     };
     for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags.items });
-    libluajit.addObjectFile(ljvm);
+    if (target.result.os.tag == .windows) {
+        libluajit.addObjectFile(ljvm);
+    } else {
+        libluajit.addAssemblyFile(ljvm);
+    }
     libluajit.addIncludePath(b.path("src"));
     libluajit.addIncludePath(b.path("src/host"));
     libluajit.addIncludePath(folddef.dirname());
