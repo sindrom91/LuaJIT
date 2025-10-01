@@ -1,8 +1,11 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const targetSys = target.result.os.tag;
+    const cpu = target.result.cpu;
 
     const minilua = b.addExecutable(.{
         .name = "minilua",
@@ -17,12 +20,27 @@ pub fn build(b: *std.Build) void {
     const genBuildvmArch = b.addRunArtifact(minilua);
     genBuildvmArch.addFileArg(b.path("dynasm/dynasm.lua"));
     genBuildvmArch.addArgs(&.{ "-D", "JIT" });
-    if (target.result.os.tag == .windows) {
+    genBuildvmArch.addArgs(&.{ "-D", "FFI" });
+    if (targetSys == .windows) {
         genBuildvmArch.addArgs(&.{ "-D", "WIN" });
+    }
+    if (cpu.arch == .arm) {
+        genBuildvmArch.addArgs(&.{ "-D", "DUALNUM" });
     }
     genBuildvmArch.addArgs(&.{ "-D", "FPU", "-o" });
     const buildvmArch = genBuildvmArch.addOutputFileArg("generated/buildvm_arch.h");
-    genBuildvmArch.addFileArg(b.path("src/vm_x64.dasc"));
+    const archName: []const u8 = switch (cpu.arch) {
+        .x86_64 => "x64",
+        .x86 => "x86",
+        .arm => "arm",
+        .aarch64, .aarch64_be => "arm64",
+        .mips, .mipsel => "mips",
+        .mips64, .mips64el => "mips64",
+        .powerpc, .powerpcle => "ppc",
+        else => return error.UnsupportedArchitecture,
+    };
+    const dascFile = try std.mem.concat(b.allocator, u8, &.{ "src/vm_", archName, ".dasc" });
+    genBuildvmArch.addFileArg(b.path(dascFile));
 
     const genRelver = b.addSystemCommand(&.{ "git", "show", "-s", "--format=%ct", "--output" });
     const relver = genRelver.addOutputFileArg("generated/luajit_relver.txt");
@@ -49,7 +67,13 @@ pub fn build(b: *std.Build) void {
         "src/host/buildvm_lib.c",
         "src/host/buildvm_fold.c",
     };
-    for (buildvmSources) |f| buildvm.addCSourceFile(.{ .file = b.path(f) });
+    for (buildvmSources) |f| buildvm.addCSourceFile(.{
+        .file = b.path(f),
+        .flags = &.{
+            "-Wno-unknown-escape-sequence",
+            try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", archName }),
+        },
+    });
     buildvm.addIncludePath(b.path("src"));
     buildvm.addIncludePath(b.path("src/host"));
     buildvm.addIncludePath(buildvmArch.dirname());
@@ -97,7 +121,7 @@ pub fn build(b: *std.Build) void {
     for (all_libs) |lib| genRecdef.addFileArg(b.path(lib));
 
     var ljvmMode: []const u8 = undefined;
-    switch (target.result.os.tag) {
+    switch (targetSys) {
         .windows => ljvmMode = "peobj",
         .linux => ljvmMode = "elfasm",
         .macos => ljvmMode = "machasm",
@@ -107,7 +131,7 @@ pub fn build(b: *std.Build) void {
     const genLjvm = b.addRunArtifact(buildvm);
     genLjvm.addArgs(&.{ "-m", ljvmMode, "-o" });
     const ljvm = genLjvm.addOutputFileArg(
-        if (target.result.os.tag == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
+        if (targetSys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
     );
 
     var cflags: std.ArrayList([]const u8) = .empty;
@@ -193,7 +217,7 @@ pub fn build(b: *std.Build) void {
         "src/lib_init.c",
     };
     for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags.items });
-    if (target.result.os.tag == .windows) {
+    if (targetSys == .windows) {
         libluajit.addObjectFile(ljvm);
     } else {
         libluajit.addAssemblyFile(ljvm);
@@ -229,7 +253,7 @@ pub fn build(b: *std.Build) void {
     luajit.linkLibrary(libluajit);
     luajit.step.dependOn(&genVersion.step);
 
-    if (target.result.os.tag == .linux) {
+    if (targetSys == .linux) {
         luajit.linkSystemLibrary("unwind");
     }
 
