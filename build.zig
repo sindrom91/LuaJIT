@@ -72,10 +72,23 @@ pub fn build(b: *std.Build) !void {
     const luajith = genVersion.addOutputFileArg("generated/luajit.h");
     genVersion.step.dependOn(&genRelver.step);
 
+    var host = b.graph.host;
+
+    if (target.result.ptrBitWidth() == 32) {
+        if (b.graph.host.result.ptrBitWidth() == 64) {
+            // TODO: This should work for other architectures, not just x86_64.
+            host = b.resolveTargetQuery(.{
+                .cpu_arch = .x86,
+                .os_tag = host.result.os.tag,
+                .abi = host.result.abi,
+            });
+        }
+    }
+
     const buildvm = b.addExecutable(.{
         .name = "buildvm",
         .root_module = b.createModule(.{
-            .target = b.graph.host, // This is always executed on the host system!
+            .target = host, // This is always executed on the host system!
             .optimize = std.builtin.OptimizeMode.ReleaseFast, // TODO: Does not work in Debug.
         }),
     });
