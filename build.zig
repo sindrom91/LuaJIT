@@ -7,6 +7,26 @@ pub fn build(b: *std.Build) !void {
     const targetSys = target.result.os.tag;
     const cpu = target.result.cpu;
 
+    const hostSys = b.graph.host.result.os.tag;
+
+    var hostFlags: std.ArrayList([]const u8) = .empty;
+    if (hostSys != targetSys) {
+        // TODO: This is probably not the same as what Makefile does.
+        switch (targetSys) {
+            .windows => {
+                try hostFlags.append(b.allocator, "-malign-double");
+                try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
+            },
+            .linux => try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_LINUX"),
+            .macos => try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX"),
+            .ios => {
+                try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX");
+                try hostFlags.append(b.allocator, "-DTARGET_OS_IPHONE=1");
+            },
+            else => try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OTHER"),
+        }
+    }
+
     const minilua = b.addExecutable(.{
         .name = "minilua",
         .root_module = b.createModule(.{
@@ -67,13 +87,11 @@ pub fn build(b: *std.Build) !void {
         "src/host/buildvm_lib.c",
         "src/host/buildvm_fold.c",
     };
-    for (buildvmSources) |f| buildvm.addCSourceFile(.{
-        .file = b.path(f),
-        .flags = &.{
-            "-Wno-unknown-escape-sequence",
-            try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", archName }),
-        },
-    });
+
+    try hostFlags.append(b.allocator, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
+    try hostFlags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", archName }));
+
+    for (buildvmSources) |f| buildvm.addCSourceFile(.{ .file = b.path(f), .flags = hostFlags.items });
     buildvm.addIncludePath(b.path("src"));
     buildvm.addIncludePath(b.path("src/host"));
     buildvm.addIncludePath(buildvmArch.dirname());
