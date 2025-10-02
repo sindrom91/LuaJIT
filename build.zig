@@ -1,12 +1,103 @@
 const std = @import("std");
 
+fn zigTripleAlloc(gpa: std.mem.Allocator, t: std.Target) ![]u8 {
+    if (t.abi == .none)
+        return std.fmt.allocPrint(gpa, "{s}-{s}", .{ @tagName(t.cpu.arch), @tagName(t.os.tag) });
+    return std.fmt.allocPrint(gpa, "{s}-{s}-{s}", .{ @tagName(t.cpu.arch), @tagName(t.os.tag), @tagName(t.abi) });
+}
+
+fn getTargetMacros(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(gpa);
+    try argv.appendSlice(gpa, &.{
+        "zig",
+        "cc",
+        "-E",
+        "-dM",
+        "-target",
+        triple,
+        "-D_FILE_OFFSET_BITS=64",
+        "-D_LARGEFILE_SOURCE",
+        "-U_FORTIFY_SOURCE",
+        "src/lj_arch.h",
+    });
+
+    var child = std.process.Child.init(argv.items, gpa);
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
+    try child.spawn();
+
+    const out = try child.stdout.?.readToEndAlloc(gpa, 10 * 1024 * 1024);
+    const err = try child.stderr.?.readToEndAlloc(gpa, 128 * 1024);
+    const term = try child.wait();
+
+    switch (term) {
+        .Exited => |code| if (code != 0) {
+            std.debug.print("preprocess failed ({d}): {s}\n", .{ code, err });
+            return error.PreprocessFailed;
+        },
+        else => {
+            std.debug.print("preprocess failed: {s}\n", .{err});
+            return error.PreprocessFailed;
+        },
+    }
+    return out; // caller frees
+}
+
+fn hasDefine(target_testarch: []const u8, name: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, target_testarch, '\n');
+    while (lines.next()) |line_raw| {
+        const line = std.mem.trim(u8, line_raw, " \t\r");
+        if (!std.mem.startsWith(u8, line, "#define ")) continue;
+        var it = std.mem.tokenizeAny(u8, line[8..], " \t(");
+        if (std.mem.eql(u8, it.next() orelse continue, name)) return true;
+    }
+    return false;
+}
+
+fn defineEquals(target_testarch: []const u8, name: []const u8, value: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, target_testarch, '\n');
+    while (lines.next()) |line_raw| {
+        const line = std.mem.trim(u8, line_raw, " \t\r");
+        if (!std.mem.startsWith(u8, line, "#define ")) continue;
+        var it = std.mem.tokenizeAny(u8, line[8..], " \t(");
+        const n = it.next() orelse continue;
+        if (!std.mem.eql(u8, n, name)) continue;
+        const v = it.next() orelse "1";
+        return std.mem.eql(u8, v, value);
+    }
+    return false;
+}
+
+fn getTargetLjarch(target_testarch: []const u8) []const u8 {
+    if (hasDefine(target_testarch, "LJ_TARGET_X64")) {
+        return "x64";
+    } else if (hasDefine(target_testarch, "LJ_TARGET_X86")) {
+        return "x86";
+    } else if (hasDefine(target_testarch, "LJ_TARGET_ARM")) {
+        return "arm";
+    } else if (hasDefine(target_testarch, "LJ_TARGET_ARM64")) {
+        return "arm64";
+    } else if (hasDefine(target_testarch, "LJ_TARGET_PPC")) {
+        return "ppc";
+    } else if (hasDefine(target_testarch, "LJ_TARGET_MIPS")) {
+        if (hasDefine(target_testarch, "LJ_TARGET_MIPS64")) {
+            return "mips64";
+        } else {
+            return "mips";
+        }
+    } else if (hasDefine(target_testarch, "LJ_TARGET_PPC")) {
+        return "ppc";
+    } else {
+        @panic("Unsupported architecture.");
+    }
+}
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const targetSys = target.result.os.tag;
-    const cpu = target.result.cpu;
-
     const hostSys = b.graph.host.result.os.tag;
 
     var hostFlags: std.ArrayList([]const u8) = .empty;
@@ -27,6 +118,54 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
+    const triple = try zigTripleAlloc(b.allocator, target.result);
+    defer b.allocator.free(triple);
+    const target_testarch = try getTargetMacros(b.allocator, triple);
+    const target_ljarch = getTargetLjarch(target_testarch);
+    var dasm_arch = target_ljarch;
+
+    // Set up DASM flags.
+    var dasm_flags: std.ArrayList([]const u8) = .empty;
+    if (defineEquals(target_testarch, "LJ_LE", "1")) {
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_LE" });
+    } else {
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_BE" });
+    }
+    if (defineEquals(target_testarch, "LJ_ARCH_BITS", "64"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "P64" });
+    if (defineEquals(target_testarch, "LJ_HASJIT", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "JIT" });
+    if (defineEquals(target_testarch, "LJ_HASFFI", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FFI" });
+    if (defineEquals(target_testarch, "LJ_DUALNUM", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "DUALNUM" });
+    if (defineEquals(target_testarch, "LJ_ARCH_HASFPU", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FPU" });
+    if (!defineEquals(target_testarch, "LJ_ABI_SOFTFP", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "HFABI" });
+    if (targetSys == .windows)
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "WIN" });
+    if (defineEquals(target_testarch, "LJ_NO_UNWIND", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "NO_UNWIND" });
+    if (defineEquals(target_testarch, "LJ_ABI_PAUTH", "1"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PAUTH" });
+    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(target_testarch, "LJ_FR2", "1"))
+        dasm_arch = "x86";
+    if (std.mem.eql(u8, target_ljarch, "arm") and targetSys == .ios)
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "IOS" });
+    if (hasDefine(target_testarch, "LJ_TARGET_MIPSR6"))
+        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "MIPSR6" });
+    if (std.mem.eql(u8, target_ljarch, "ppc")) {
+        if (defineEquals(target_testarch, "LJ_ARCH_SQRT", "1"))
+            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "SQRT" });
+        if (defineEquals(target_testarch, "LJ_ARCH_ROUND", "1"))
+            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ROUND" });
+        if (defineEquals(target_testarch, "LJ_ARCH_PPC32ON64", "1"))
+            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "GPR64" });
+        if (targetSys == .ps3)
+            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PPE", "-D", "TOC" });
+    }
+
     const minilua = b.addExecutable(.{
         .name = "minilua",
         .root_module = b.createModule(.{
@@ -39,27 +178,10 @@ pub fn build(b: *std.Build) !void {
 
     const genBuildvmArch = b.addRunArtifact(minilua);
     genBuildvmArch.addFileArg(b.path("dynasm/dynasm.lua"));
-    genBuildvmArch.addArgs(&.{ "-D", "JIT" });
-    genBuildvmArch.addArgs(&.{ "-D", "FFI" });
-    if (targetSys == .windows) {
-        genBuildvmArch.addArgs(&.{ "-D", "WIN" });
-    }
-    if (cpu.arch == .arm) {
-        genBuildvmArch.addArgs(&.{ "-D", "DUALNUM" });
-    }
-    genBuildvmArch.addArgs(&.{ "-D", "FPU", "-o" });
+    genBuildvmArch.addArgs(dasm_flags.items);
+    genBuildvmArch.addArg("-o");
     const buildvmArch = genBuildvmArch.addOutputFileArg("generated/buildvm_arch.h");
-    const archName: []const u8 = switch (cpu.arch) {
-        .x86_64 => "x64",
-        .x86 => "x86",
-        .arm => "arm",
-        .aarch64, .aarch64_be => "arm64",
-        .mips, .mipsel => "mips",
-        .mips64, .mips64el => "mips64",
-        .powerpc, .powerpcle => "ppc",
-        else => return error.UnsupportedArchitecture,
-    };
-    const dascFile = try std.mem.concat(b.allocator, u8, &.{ "src/vm_", archName, ".dasc" });
+    const dascFile = try std.mem.concat(b.allocator, u8, &.{ "src/vm_", dasm_arch, ".dasc" });
     genBuildvmArch.addFileArg(b.path(dascFile));
 
     const genRelver = b.addSystemCommand(&.{ "git", "show", "-s", "--format=%ct", "--output" });
@@ -73,6 +195,21 @@ pub fn build(b: *std.Build) !void {
     genVersion.step.dependOn(&genRelver.step);
 
     var host = b.graph.host;
+
+    // Set up HOST flags.
+    if (hasDefine(target_testarch, "LJ_TARGET_ARM64") and hasDefine(target_testarch, "__AARCH64EB__")) {
+        try hostFlags.append(b.allocator, "-D__AARCH64EB__=1");
+    } else if (hasDefine(target_testarch, "LJ_TARGET_PPC")) {
+        if (defineEquals(target_testarch, "LJ_LE", "1")) {
+            try hostFlags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
+        } else {
+            try hostFlags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
+        }
+    } else if (hasDefine(target_testarch, "LJ_TARGET_MIPS") and hasDefine(target_testarch, "MIPSEL")) {
+        try hostFlags.append(b.allocator, "-D__MIPSEL__=1");
+    } else if (defineEquals(target_testarch, "LJ_TARGET_PS3", "1")) {
+        try hostFlags.append(b.allocator, "-D__CELLOS_LV2__");
+    }
 
     if (target.result.ptrBitWidth() == 32) {
         if (b.graph.host.result.ptrBitWidth() == 64) {
@@ -102,7 +239,7 @@ pub fn build(b: *std.Build) !void {
     };
 
     try hostFlags.append(b.allocator, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
-    try hostFlags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", archName }));
+    try hostFlags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
 
     for (buildvmSources) |f| buildvm.addCSourceFile(.{ .file = b.path(f), .flags = hostFlags.items });
     buildvm.addIncludePath(b.path("src"));
