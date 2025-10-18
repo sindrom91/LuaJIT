@@ -210,6 +210,22 @@ pub fn build(b: *std.Build) !void {
     } else if (defineEquals(target_testarch, "LJ_TARGET_PS3", "1")) {
         try hostFlags.append(b.allocator, "-D__CELLOS_LV2__");
     }
+    if (defineEquals(target_testarch, "LJ_ARCH_HASFPU", "1")) {
+        try hostFlags.append(b.allocator, "-DLJ_ARCH_HASFPU=1");
+    } else {
+        try hostFlags.append(b.allocator, "-DLJ_ARCH_HASFPU=0");
+    }
+    if (defineEquals(target_testarch, "LJ_ABI_SOFTFP", "1")) {
+        try hostFlags.append(b.allocator, "-DLJ_ABI_SOFTFP=1");
+    } else {
+        try hostFlags.append(b.allocator, "-DLJ_ABI_SOFTFP=0");
+    }
+    if (defineEquals(target_testarch, "LJ_NO_UNWIND", "1")) {
+        try hostFlags.append(b.allocator, "-DLUAJIT_NO_UNWIND");
+    }
+    if (defineEquals(target_testarch, "LJ_ABI_PAUTH", "1")) {
+        try hostFlags.append(b.allocator, "-DLJ_ABI_PAUTH=1");
+    }
 
     if (target.result.ptrBitWidth() == 32) {
         if (b.graph.host.result.ptrBitWidth() == 64) {
@@ -303,7 +319,7 @@ pub fn build(b: *std.Build) !void {
     );
 
     var cflags: std.ArrayList([]const u8) = .empty;
-    cflags.append(b.allocator, "-DLUAJIT_UNWIND_EXTERNAL") catch unreachable;
+    try cflags.append(b.allocator, "-DLUAJIT_UNWIND_EXTERNAL");
 
     const libluajit = b.addLibrary(.{
         .name = "libluajit",
