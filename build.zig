@@ -6,7 +6,7 @@ fn zigTripleAlloc(gpa: std.mem.Allocator, t: std.Target) ![]u8 {
     return std.fmt.allocPrint(gpa, "{s}-{s}-{s}", .{ @tagName(t.cpu.arch), @tagName(t.os.tag), @tagName(t.abi) });
 }
 
-fn getTargetMacros(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
+fn getTargetDefines(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(gpa);
     try argv.appendSlice(gpa, &.{
@@ -44,8 +44,8 @@ fn getTargetMacros(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
     return out; // caller frees
 }
 
-fn hasDefine(target_testarch: []const u8, name: []const u8) bool {
-    var lines = std.mem.tokenizeScalar(u8, target_testarch, '\n');
+fn hasDefine(targetDefines: []const u8, name: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, targetDefines, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, " \t\r");
         if (!std.mem.startsWith(u8, line, "#define ")) continue;
@@ -55,8 +55,8 @@ fn hasDefine(target_testarch: []const u8, name: []const u8) bool {
     return false;
 }
 
-fn defineEquals(target_testarch: []const u8, name: []const u8, value: []const u8) bool {
-    var lines = std.mem.tokenizeScalar(u8, target_testarch, '\n');
+fn defineEquals(targetDefines: []const u8, name: []const u8, value: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, targetDefines, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, " \t\r");
         if (!std.mem.startsWith(u8, line, "#define ")) continue;
@@ -69,24 +69,24 @@ fn defineEquals(target_testarch: []const u8, name: []const u8, value: []const u8
     return false;
 }
 
-fn getTargetLjarch(target_testarch: []const u8) []const u8 {
-    if (hasDefine(target_testarch, "LJ_TARGET_X64")) {
+fn getTargetLjarch(targetDefines: []const u8) []const u8 {
+    if (hasDefine(targetDefines, "LJ_TARGET_X64")) {
         return "x64";
-    } else if (hasDefine(target_testarch, "LJ_TARGET_X86")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_X86")) {
         return "x86";
-    } else if (hasDefine(target_testarch, "LJ_TARGET_ARM")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_ARM")) {
         return "arm";
-    } else if (hasDefine(target_testarch, "LJ_TARGET_ARM64")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_ARM64")) {
         return "arm64";
-    } else if (hasDefine(target_testarch, "LJ_TARGET_PPC")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_PPC")) {
         return "ppc";
-    } else if (hasDefine(target_testarch, "LJ_TARGET_MIPS")) {
-        if (hasDefine(target_testarch, "LJ_TARGET_MIPS64")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_MIPS")) {
+        if (hasDefine(targetDefines, "LJ_TARGET_MIPS64")) {
             return "mips64";
         } else {
             return "mips";
         }
-    } else if (hasDefine(target_testarch, "LJ_TARGET_PPC")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_PPC")) {
         return "ppc";
     } else {
         @panic("Unsupported architecture.");
@@ -120,47 +120,47 @@ pub fn build(b: *std.Build) !void {
 
     const triple = try zigTripleAlloc(b.allocator, target.result);
     defer b.allocator.free(triple);
-    const target_testarch = try getTargetMacros(b.allocator, triple);
-    const target_ljarch = getTargetLjarch(target_testarch);
+    const targetDefines = try getTargetDefines(b.allocator, triple);
+    const target_ljarch = getTargetLjarch(targetDefines);
     var dasm_arch = target_ljarch;
 
     // Set up DASM flags.
     var dasm_flags: std.ArrayList([]const u8) = .empty;
-    if (defineEquals(target_testarch, "LJ_LE", "1")) {
+    if (defineEquals(targetDefines, "LJ_LE", "1")) {
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_LE" });
     } else {
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_BE" });
     }
-    if (defineEquals(target_testarch, "LJ_ARCH_BITS", "64"))
+    if (defineEquals(targetDefines, "LJ_ARCH_BITS", "64"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "P64" });
-    if (defineEquals(target_testarch, "LJ_HASJIT", "1"))
+    if (defineEquals(targetDefines, "LJ_HASJIT", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "JIT" });
-    if (defineEquals(target_testarch, "LJ_HASFFI", "1"))
+    if (defineEquals(targetDefines, "LJ_HASFFI", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FFI" });
-    if (defineEquals(target_testarch, "LJ_DUALNUM", "1"))
+    if (defineEquals(targetDefines, "LJ_DUALNUM", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "DUALNUM" });
-    if (defineEquals(target_testarch, "LJ_ARCH_HASFPU", "1"))
+    if (defineEquals(targetDefines, "LJ_ARCH_HASFPU", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FPU" });
-    if (!defineEquals(target_testarch, "LJ_ABI_SOFTFP", "1"))
+    if (!defineEquals(targetDefines, "LJ_ABI_SOFTFP", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "HFABI" });
     if (targetSys == .windows)
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "WIN" });
-    if (defineEquals(target_testarch, "LJ_NO_UNWIND", "1"))
+    if (defineEquals(targetDefines, "LJ_NO_UNWIND", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "NO_UNWIND" });
-    if (defineEquals(target_testarch, "LJ_ABI_PAUTH", "1"))
+    if (defineEquals(targetDefines, "LJ_ABI_PAUTH", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PAUTH" });
-    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(target_testarch, "LJ_FR2", "1"))
+    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(targetDefines, "LJ_FR2", "1"))
         dasm_arch = "x86";
     if (std.mem.eql(u8, target_ljarch, "arm") and targetSys == .ios)
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "IOS" });
-    if (hasDefine(target_testarch, "LJ_TARGET_MIPSR6"))
+    if (hasDefine(targetDefines, "LJ_TARGET_MIPSR6"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "MIPSR6" });
     if (std.mem.eql(u8, target_ljarch, "ppc")) {
-        if (defineEquals(target_testarch, "LJ_ARCH_SQRT", "1"))
+        if (defineEquals(targetDefines, "LJ_ARCH_SQRT", "1"))
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "SQRT" });
-        if (defineEquals(target_testarch, "LJ_ARCH_ROUND", "1"))
+        if (defineEquals(targetDefines, "LJ_ARCH_ROUND", "1"))
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ROUND" });
-        if (defineEquals(target_testarch, "LJ_ARCH_PPC32ON64", "1"))
+        if (defineEquals(targetDefines, "LJ_ARCH_PPC32ON64", "1"))
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "GPR64" });
         if (targetSys == .ps3)
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PPE", "-D", "TOC" });
@@ -197,33 +197,33 @@ pub fn build(b: *std.Build) !void {
     var host = b.graph.host;
 
     // Set up HOST flags.
-    if (hasDefine(target_testarch, "LJ_TARGET_ARM64") and hasDefine(target_testarch, "__AARCH64EB__")) {
+    if (hasDefine(targetDefines, "LJ_TARGET_ARM64") and hasDefine(targetDefines, "__AARCH64EB__")) {
         try hostFlags.append(b.allocator, "-D__AARCH64EB__=1");
-    } else if (hasDefine(target_testarch, "LJ_TARGET_PPC")) {
-        if (defineEquals(target_testarch, "LJ_LE", "1")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_PPC")) {
+        if (defineEquals(targetDefines, "LJ_LE", "1")) {
             try hostFlags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
         } else {
             try hostFlags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
         }
-    } else if (hasDefine(target_testarch, "LJ_TARGET_MIPS") and hasDefine(target_testarch, "MIPSEL")) {
+    } else if (hasDefine(targetDefines, "LJ_TARGET_MIPS") and hasDefine(targetDefines, "MIPSEL")) {
         try hostFlags.append(b.allocator, "-D__MIPSEL__=1");
-    } else if (defineEquals(target_testarch, "LJ_TARGET_PS3", "1")) {
+    } else if (defineEquals(targetDefines, "LJ_TARGET_PS3", "1")) {
         try hostFlags.append(b.allocator, "-D__CELLOS_LV2__");
     }
-    if (defineEquals(target_testarch, "LJ_ARCH_HASFPU", "1")) {
+    if (defineEquals(targetDefines, "LJ_ARCH_HASFPU", "1")) {
         try hostFlags.append(b.allocator, "-DLJ_ARCH_HASFPU=1");
     } else {
         try hostFlags.append(b.allocator, "-DLJ_ARCH_HASFPU=0");
     }
-    if (defineEquals(target_testarch, "LJ_ABI_SOFTFP", "1")) {
+    if (defineEquals(targetDefines, "LJ_ABI_SOFTFP", "1")) {
         try hostFlags.append(b.allocator, "-DLJ_ABI_SOFTFP=1");
     } else {
         try hostFlags.append(b.allocator, "-DLJ_ABI_SOFTFP=0");
     }
-    if (defineEquals(target_testarch, "LJ_NO_UNWIND", "1")) {
+    if (defineEquals(targetDefines, "LJ_NO_UNWIND", "1")) {
         try hostFlags.append(b.allocator, "-DLUAJIT_NO_UNWIND");
     }
-    if (defineEquals(target_testarch, "LJ_ABI_PAUTH", "1")) {
+    if (defineEquals(targetDefines, "LJ_ABI_PAUTH", "1")) {
         try hostFlags.append(b.allocator, "-DLJ_ABI_PAUTH=1");
     }
 
