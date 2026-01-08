@@ -41,11 +41,11 @@ fn getTargetDefines(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
             return error.PreprocessFailed;
         },
     }
-    return out; // caller frees
+    return out;
 }
 
-fn hasDefine(targetDefines: []const u8, name: []const u8) bool {
-    var lines = std.mem.tokenizeScalar(u8, targetDefines, '\n');
+fn hasDefine(target_defines: []const u8, name: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, " \t\r");
         if (!std.mem.startsWith(u8, line, "#define ")) continue;
@@ -55,8 +55,8 @@ fn hasDefine(targetDefines: []const u8, name: []const u8) bool {
     return false;
 }
 
-fn defineEquals(targetDefines: []const u8, name: []const u8, value: []const u8) bool {
-    var lines = std.mem.tokenizeScalar(u8, targetDefines, '\n');
+fn defineEquals(target_defines: []const u8, name: []const u8, value: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, " \t\r");
         if (!std.mem.startsWith(u8, line, "#define ")) continue;
@@ -69,24 +69,24 @@ fn defineEquals(targetDefines: []const u8, name: []const u8, value: []const u8) 
     return false;
 }
 
-fn getTargetLjarch(targetDefines: []const u8) []const u8 {
-    if (hasDefine(targetDefines, "LJ_TARGET_X64")) {
+fn getTargetLjarch(target_defines: []const u8) []const u8 {
+    if (hasDefine(target_defines, "LJ_TARGET_X64")) {
         return "x64";
-    } else if (hasDefine(targetDefines, "LJ_TARGET_X86")) {
+    } else if (hasDefine(target_defines, "LJ_TARGET_X86")) {
         return "x86";
-    } else if (hasDefine(targetDefines, "LJ_TARGET_ARM")) {
+    } else if (hasDefine(target_defines, "LJ_TARGET_ARM")) {
         return "arm";
-    } else if (hasDefine(targetDefines, "LJ_TARGET_ARM64")) {
+    } else if (hasDefine(target_defines, "LJ_TARGET_ARM64")) {
         return "arm64";
-    } else if (hasDefine(targetDefines, "LJ_TARGET_PPC")) {
+    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
         return "ppc";
-    } else if (hasDefine(targetDefines, "LJ_TARGET_MIPS")) {
-        if (hasDefine(targetDefines, "LJ_TARGET_MIPS64")) {
+    } else if (hasDefine(target_defines, "LJ_TARGET_MIPS")) {
+        if (hasDefine(target_defines, "LJ_TARGET_MIPS64")) {
             return "mips64";
         } else {
             return "mips";
         }
-    } else if (hasDefine(targetDefines, "LJ_TARGET_PPC")) {
+    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
         return "ppc";
     } else {
         @panic("Unsupported architecture.");
@@ -98,72 +98,72 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const arch = target.result.cpu.arch;
-    const targetSys = target.result.os.tag;
-    const hostSys = b.graph.host.result.os.tag;
+    const target_sys = target.result.os.tag;
+    const host_sys = b.graph.host.result.os.tag;
 
-    var hostFlags: std.ArrayList([]const u8) = .empty;
-    if (hostSys != targetSys) {
+    var host_flags: std.ArrayList([]const u8) = .empty;
+    if (host_sys != target_sys) {
         // TODO: This is probably not the same as what Makefile does.
-        switch (targetSys) {
+        switch (target_sys) {
             .windows => {
-                try hostFlags.append(b.allocator, "-malign-double");
-                try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
+                try host_flags.append(b.allocator, "-malign-double");
+                try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
             },
-            .linux => try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_LINUX"),
-            .macos => try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX"),
+            .linux => try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_LINUX"),
+            .macos => try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX"),
             .ios => {
-                try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX");
-                try hostFlags.append(b.allocator, "-DTARGET_OS_IPHONE=1");
+                try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX");
+                try host_flags.append(b.allocator, "-DTARGET_OS_IPHONE=1");
             },
-            else => try hostFlags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OTHER"),
+            else => try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OTHER"),
         }
     }
 
     const triple = try zigTripleAlloc(b.allocator, target.result);
     defer b.allocator.free(triple);
-    const targetDefines = try getTargetDefines(b.allocator, triple);
-    const target_ljarch = getTargetLjarch(targetDefines);
+    const target_defines = try getTargetDefines(b.allocator, triple);
+    const target_ljarch = getTargetLjarch(target_defines);
     var dasm_arch = target_ljarch;
 
     // Set up DASM flags.
     var dasm_flags: std.ArrayList([]const u8) = .empty;
-    if (defineEquals(targetDefines, "LJ_LE", "1")) {
+    if (defineEquals(target_defines, "LJ_LE", "1")) {
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_LE" });
     } else {
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_BE" });
     }
-    if (defineEquals(targetDefines, "LJ_ARCH_BITS", "64"))
+    if (defineEquals(target_defines, "LJ_ARCH_BITS", "64"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "P64" });
-    if (defineEquals(targetDefines, "LJ_HASJIT", "1"))
+    if (defineEquals(target_defines, "LJ_HASJIT", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "JIT" });
-    if (defineEquals(targetDefines, "LJ_HASFFI", "1"))
+    if (defineEquals(target_defines, "LJ_HASFFI", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FFI" });
-    if (defineEquals(targetDefines, "LJ_DUALNUM", "1"))
+    if (defineEquals(target_defines, "LJ_DUALNUM", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "DUALNUM" });
-    if (defineEquals(targetDefines, "LJ_ARCH_HASFPU", "1"))
+    if (defineEquals(target_defines, "LJ_ARCH_HASFPU", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FPU" });
-    if (!defineEquals(targetDefines, "LJ_ABI_SOFTFP", "1"))
+    if (!defineEquals(target_defines, "LJ_ABI_SOFTFP", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "HFABI" });
-    if (targetSys == .windows)
+    if (target_sys == .windows)
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "WIN" });
-    if (defineEquals(targetDefines, "LJ_NO_UNWIND", "1"))
+    if (defineEquals(target_defines, "LJ_NO_UNWIND", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "NO_UNWIND" });
-    if (defineEquals(targetDefines, "LJ_ABI_PAUTH", "1"))
+    if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PAUTH" });
-    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(targetDefines, "LJ_FR2", "1"))
+    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(target_defines, "LJ_FR2", "1"))
         dasm_arch = "x86";
-    if (std.mem.eql(u8, target_ljarch, "arm") and targetSys == .ios)
+    if (std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios)
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "IOS" });
-    if (hasDefine(targetDefines, "LJ_TARGET_MIPSR6"))
+    if (hasDefine(target_defines, "LJ_TARGET_MIPSR6"))
         try dasm_flags.appendSlice(b.allocator, &.{ "-D", "MIPSR6" });
     if (std.mem.eql(u8, target_ljarch, "ppc")) {
-        if (defineEquals(targetDefines, "LJ_ARCH_SQRT", "1"))
+        if (defineEquals(target_defines, "LJ_ARCH_SQRT", "1"))
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "SQRT" });
-        if (defineEquals(targetDefines, "LJ_ARCH_ROUND", "1"))
+        if (defineEquals(target_defines, "LJ_ARCH_ROUND", "1"))
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ROUND" });
-        if (defineEquals(targetDefines, "LJ_ARCH_PPC32ON64", "1"))
+        if (defineEquals(target_defines, "LJ_ARCH_PPC32ON64", "1"))
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "GPR64" });
-        if (targetSys == .ps3)
+        if (target_sys == .ps3)
             try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PPE", "-D", "TOC" });
     }
 
@@ -177,55 +177,55 @@ pub fn build(b: *std.Build) !void {
     minilua.linkLibC();
     minilua.addCSourceFile(.{ .file = b.path("src/host/minilua.c") });
 
-    const genBuildvmArch = b.addRunArtifact(minilua);
-    genBuildvmArch.addFileArg(b.path("dynasm/dynasm.lua"));
-    genBuildvmArch.addArgs(dasm_flags.items);
-    genBuildvmArch.addArg("-o");
-    const buildvmArch = genBuildvmArch.addOutputFileArg("generated/buildvm_arch.h");
-    const dascFile = try std.mem.concat(b.allocator, u8, &.{ "src/vm_", dasm_arch, ".dasc" });
-    genBuildvmArch.addFileArg(b.path(dascFile));
+    const gen_buildvm_arch = b.addRunArtifact(minilua);
+    gen_buildvm_arch.addFileArg(b.path("dynasm/dynasm.lua"));
+    gen_buildvm_arch.addArgs(dasm_flags.items);
+    gen_buildvm_arch.addArg("-o");
+    const buildvm_arch = gen_buildvm_arch.addOutputFileArg("generated/buildvm_arch.h");
+    const dasc_file = try std.mem.concat(b.allocator, u8, &.{ "src/vm_", dasm_arch, ".dasc" });
+    gen_buildvm_arch.addFileArg(b.path(dasc_file));
 
-    const genRelver = b.addSystemCommand(&.{ "git", "show", "-s", "--format=%ct", "--output" });
-    const relver = genRelver.addOutputFileArg("generated/luajit_relver.txt");
+    const gen_relver = b.addSystemCommand(&.{ "git", "show", "-s", "--format=%ct", "--output" });
+    const relver = gen_relver.addOutputFileArg("generated/luajit_relver.txt");
 
-    const genVersion = b.addRunArtifact(minilua);
-    genVersion.addFileArg(b.path("src/host/genversion.lua"));
-    genVersion.addFileArg(b.path("src/luajit_rolling.h"));
-    genVersion.addFileArg(relver);
-    const luajith = genVersion.addOutputFileArg("generated/luajit.h");
-    genVersion.step.dependOn(&genRelver.step);
+    const gen_version = b.addRunArtifact(minilua);
+    gen_version.addFileArg(b.path("src/host/genversion.lua"));
+    gen_version.addFileArg(b.path("src/luajit_rolling.h"));
+    gen_version.addFileArg(relver);
+    const luajith = gen_version.addOutputFileArg("generated/luajit.h");
+    gen_version.step.dependOn(&gen_relver.step);
 
     var host = b.graph.host;
 
     // Set up HOST flags.
-    if (hasDefine(targetDefines, "LJ_TARGET_ARM64") and hasDefine(targetDefines, "__AARCH64EB__")) {
-        try hostFlags.append(b.allocator, "-D__AARCH64EB__=1");
-    } else if (hasDefine(targetDefines, "LJ_TARGET_PPC")) {
-        if (defineEquals(targetDefines, "LJ_LE", "1")) {
-            try hostFlags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
+    if (hasDefine(target_defines, "LJ_TARGET_ARM64") and hasDefine(target_defines, "__AARCH64EB__")) {
+        try host_flags.append(b.allocator, "-D__AARCH64EB__=1");
+    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
+        if (defineEquals(target_defines, "LJ_LE", "1")) {
+            try host_flags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
         } else {
-            try hostFlags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
+            try host_flags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
         }
-    } else if (hasDefine(targetDefines, "LJ_TARGET_MIPS") and hasDefine(targetDefines, "MIPSEL")) {
-        try hostFlags.append(b.allocator, "-D__MIPSEL__=1");
-    } else if (defineEquals(targetDefines, "LJ_TARGET_PS3", "1")) {
-        try hostFlags.append(b.allocator, "-D__CELLOS_LV2__");
+    } else if (hasDefine(target_defines, "LJ_TARGET_MIPS") and hasDefine(target_defines, "MIPSEL")) {
+        try host_flags.append(b.allocator, "-D__MIPSEL__=1");
+    } else if (defineEquals(target_defines, "LJ_TARGET_PS3", "1")) {
+        try host_flags.append(b.allocator, "-D__CELLOS_LV2__");
     }
-    if (defineEquals(targetDefines, "LJ_ARCH_HASFPU", "1")) {
-        try hostFlags.append(b.allocator, "-DLJ_ARCH_HASFPU=1");
+    if (defineEquals(target_defines, "LJ_ARCH_HASFPU", "1")) {
+        try host_flags.append(b.allocator, "-DLJ_ARCH_HASFPU=1");
     } else {
-        try hostFlags.append(b.allocator, "-DLJ_ARCH_HASFPU=0");
+        try host_flags.append(b.allocator, "-DLJ_ARCH_HASFPU=0");
     }
-    if (defineEquals(targetDefines, "LJ_ABI_SOFTFP", "1")) {
-        try hostFlags.append(b.allocator, "-DLJ_ABI_SOFTFP=1");
+    if (defineEquals(target_defines, "LJ_ABI_SOFTFP", "1")) {
+        try host_flags.append(b.allocator, "-DLJ_ABI_SOFTFP=1");
     } else {
-        try hostFlags.append(b.allocator, "-DLJ_ABI_SOFTFP=0");
+        try host_flags.append(b.allocator, "-DLJ_ABI_SOFTFP=0");
     }
-    if (defineEquals(targetDefines, "LJ_NO_UNWIND", "1")) {
-        try hostFlags.append(b.allocator, "-DLUAJIT_NO_UNWIND");
+    if (defineEquals(target_defines, "LJ_NO_UNWIND", "1")) {
+        try host_flags.append(b.allocator, "-DLUAJIT_NO_UNWIND");
     }
-    if (defineEquals(targetDefines, "LJ_ABI_PAUTH", "1")) {
-        try hostFlags.append(b.allocator, "-DLJ_ABI_PAUTH=1");
+    if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1")) {
+        try host_flags.append(b.allocator, "-DLJ_ABI_PAUTH=1");
     }
 
     if (target.result.ptrBitWidth() == 32) {
@@ -244,10 +244,10 @@ pub fn build(b: *std.Build) !void {
         .root_module = b.createModule(.{
             .target = host, // This is always executed on the host system!
             .optimize = std.builtin.OptimizeMode.ReleaseFast, // TODO: Does not work in Debug.
+            .link_libc = true,
         }),
     });
-    buildvm.linkLibC();
-    const buildvmSources = [_][]const u8{
+    const buildvm_sources = [_][]const u8{
         "src/host/buildvm.c",
         "src/host/buildvm_asm.c",
         "src/host/buildvm_peobj.c",
@@ -255,25 +255,25 @@ pub fn build(b: *std.Build) !void {
         "src/host/buildvm_fold.c",
     };
 
-    try hostFlags.append(b.allocator, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
-    try hostFlags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
+    try host_flags.append(b.allocator, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
+    try host_flags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
 
-    for (buildvmSources) |f| buildvm.addCSourceFile(.{ .file = b.path(f), .flags = hostFlags.items });
+    for (buildvm_sources) |f| buildvm.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
     buildvm.addIncludePath(b.path("src"));
     buildvm.addIncludePath(b.path("src/host"));
-    buildvm.addIncludePath(buildvmArch.dirname());
+    buildvm.addIncludePath(buildvm_arch.dirname());
     buildvm.addIncludePath(luajith.dirname());
-    buildvm.step.dependOn(&genBuildvmArch.step);
-    buildvm.step.dependOn(&genVersion.step);
+    buildvm.step.dependOn(&gen_buildvm_arch.step);
+    buildvm.step.dependOn(&gen_version.step);
 
-    const genFolddef = b.addRunArtifact(buildvm);
-    genFolddef.addArgs(&.{ "-m", "folddef", "-o" });
-    const folddef = genFolddef.addOutputFileArg("generated/lj_folddef.h");
-    genFolddef.addFileArg(b.path("src/lj_opt_fold.c"));
+    const gen_folddef = b.addRunArtifact(buildvm);
+    gen_folddef.addArgs(&.{ "-m", "folddef", "-o" });
+    const folddef = gen_folddef.addOutputFileArg("generated/lj_folddef.h");
+    gen_folddef.addFileArg(b.path("src/lj_opt_fold.c"));
 
-    const genLibdef = b.addRunArtifact(buildvm);
-    genLibdef.addArgs(&.{ "-m", "libdef", "-o" });
-    const libdef = genLibdef.addOutputFileArg("generated/lj_libdef.h");
+    const gen_libdef = b.addRunArtifact(buildvm);
+    gen_libdef.addArgs(&.{ "-m", "libdef", "-o" });
+    const libdef = gen_libdef.addOutputFileArg("generated/lj_libdef.h");
     const all_libs = [_][]const u8{
         "src/lib_base.c",
         "src/lib_math.c",
@@ -288,35 +288,34 @@ pub fn build(b: *std.Build) !void {
         "src/lib_ffi.c",
         "src/lib_buffer.c",
     };
-    for (all_libs) |lib| genLibdef.addFileArg(b.path(lib));
+    for (all_libs) |lib| gen_libdef.addFileArg(b.path(lib));
 
-    const genFfdef = b.addRunArtifact(buildvm);
-    genFfdef.addArgs(&.{ "-m", "ffdef", "-o" });
-    const ffdef = genFfdef.addOutputFileArg("generated/lj_ffdef.h");
-    for (all_libs) |lib| genFfdef.addFileArg(b.path(lib));
+    const gen_ffdef = b.addRunArtifact(buildvm);
+    gen_ffdef.addArgs(&.{ "-m", "ffdef", "-o" });
+    const ffdef = gen_ffdef.addOutputFileArg("generated/lj_ffdef.h");
+    for (all_libs) |lib| gen_ffdef.addFileArg(b.path(lib));
 
-    const genBcdef = b.addRunArtifact(buildvm);
-    genBcdef.addArgs(&.{ "-m", "bcdef", "-o" });
-    const bcdef = genBcdef.addOutputFileArg("generated/lj_bcdef.h");
-    for (all_libs) |lib| genBcdef.addFileArg(b.path(lib));
+    const gen_bcdef = b.addRunArtifact(buildvm);
+    gen_bcdef.addArgs(&.{ "-m", "bcdef", "-o" });
+    const bcdef = gen_bcdef.addOutputFileArg("generated/lj_bcdef.h");
+    for (all_libs) |lib| gen_bcdef.addFileArg(b.path(lib));
 
-    const genRecdef = b.addRunArtifact(buildvm);
-    genRecdef.addArgs(&.{ "-m", "recdef", "-o" });
-    const recdef = genRecdef.addOutputFileArg("generated/lj_recdef.h");
-    for (all_libs) |lib| genRecdef.addFileArg(b.path(lib));
+    const gen_recdef = b.addRunArtifact(buildvm);
+    gen_recdef.addArgs(&.{ "-m", "recdef", "-o" });
+    const recdef = gen_recdef.addOutputFileArg("generated/lj_recdef.h");
+    for (all_libs) |lib| gen_recdef.addFileArg(b.path(lib));
 
-    var ljvmMode: []const u8 = undefined;
-    switch (targetSys) {
-        .windows => ljvmMode = "peobj",
-        .linux => ljvmMode = "elfasm",
-        .macos => ljvmMode = "machasm",
-        else => unreachable,
-    }
+    const ljvm_mode = switch (target_sys) {
+        .windows => "peobj",
+        .linux => "elfasm",
+        .macos => "machasm",
+        else => @panic("Unsupported operating system."),
+    };
 
-    const genLjvm = b.addRunArtifact(buildvm);
-    genLjvm.addArgs(&.{ "-m", ljvmMode, "-o" });
-    const ljvm = genLjvm.addOutputFileArg(
-        if (targetSys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
+    const gen_ljvm = b.addRunArtifact(buildvm);
+    gen_ljvm.addArgs(&.{ "-m", ljvm_mode, "-o" });
+    const ljvm = gen_ljvm.addOutputFileArg(
+        if (target_sys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
     );
 
     const cflags = if (arch == .arm)
@@ -343,7 +342,7 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         }),
     });
-    const libluajitSources = [_][]const u8{
+    const libluajit_sources = [_][]const u8{
         "src/lj_gc.c",
         "src/lj_err.c",
         "src/lj_char.c",
@@ -413,8 +412,8 @@ pub fn build(b: *std.Build) !void {
         "src/lib_ffi.c",
         "src/lib_init.c",
     };
-    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags });
-    if (targetSys == .windows) {
+    for (libluajit_sources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags });
+    if (target_sys == .windows) {
         libluajit.addObjectFile(ljvm);
     } else {
         libluajit.addAssemblyFile(ljvm);
@@ -428,13 +427,13 @@ pub fn build(b: *std.Build) !void {
     libluajit.addIncludePath(recdef.dirname());
     libluajit.addIncludePath(luajith.dirname());
 
-    libluajit.step.dependOn(&genFolddef.step);
-    libluajit.step.dependOn(&genLibdef.step);
-    libluajit.step.dependOn(&genFfdef.step);
-    libluajit.step.dependOn(&genBcdef.step);
-    libluajit.step.dependOn(&genRecdef.step);
-    libluajit.step.dependOn(&genLjvm.step);
-    libluajit.step.dependOn(&genVersion.step);
+    libluajit.step.dependOn(&gen_folddef.step);
+    libluajit.step.dependOn(&gen_libdef.step);
+    libluajit.step.dependOn(&gen_ffdef.step);
+    libluajit.step.dependOn(&gen_bcdef.step);
+    libluajit.step.dependOn(&gen_recdef.step);
+    libluajit.step.dependOn(&gen_ljvm.step);
+    libluajit.step.dependOn(&gen_version.step);
 
     const luajit = b.addExecutable(.{
         .name = "luajit",
@@ -448,9 +447,9 @@ pub fn build(b: *std.Build) !void {
     luajit.addIncludePath(b.path("src"));
     luajit.addIncludePath(luajith.dirname());
     luajit.linkLibrary(libluajit);
-    luajit.step.dependOn(&genVersion.step);
+    luajit.step.dependOn(&gen_version.step);
 
-    if (targetSys == .linux) {
+    if (target_sys == .linux) {
         luajit.linkSystemLibrary("unwind");
     }
 
