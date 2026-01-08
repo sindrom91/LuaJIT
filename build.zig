@@ -340,9 +340,9 @@ pub fn build(b: *std.Build) !void {
         .root_module = b.createModule(.{
             .optimize = optimize,
             .target = target,
+            .link_libc = true,
         }),
     });
-    libluajit.linkLibC();
     const libluajitSources = [_][]const u8{
         "src/lj_gc.c",
         "src/lj_err.c",
@@ -441,9 +441,9 @@ pub fn build(b: *std.Build) !void {
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
-    luajit.linkLibC();
     luajit.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags });
     luajit.addIncludePath(b.path("src"));
     luajit.addIncludePath(luajith.dirname());
