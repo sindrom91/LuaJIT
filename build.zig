@@ -97,6 +97,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const arch = target.result.cpu.arch;
     const targetSys = target.result.os.tag;
     const hostSys = b.graph.host.result.os.tag;
 
@@ -318,8 +319,20 @@ pub fn build(b: *std.Build) !void {
         if (targetSys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
     );
 
-    var cflags: std.ArrayList([]const u8) = .empty;
-    try cflags.append(b.allocator, "-DLUAJIT_UNWIND_EXTERNAL");
+    const cflags = if (arch == .arm)
+        &[_][]const u8{
+            "-DLUAJIT_UNWIND_EXTERNAL",
+            "-D__floatdidf=__aeabi_l2d",
+            "-D__floatundidf=__aeabi_ul2d",
+            "-D__floatdisf=__aeabi_l2f",
+            "-D__floatundisf=__aeabi_ul2f",
+            "-D__fixdfdi=__aeabi_d2lz",
+            "-D__fixunsdfdi=__aeabi_d2ulz",
+            "-D__fixsfdi=__aeabi_f2lz",
+            "-D__fixunssfdi=__aeabi_f2ulz",
+        }
+    else
+        &[_][]const u8{"-DLUAJIT_UNWIND_EXTERNAL"};
 
     const libluajit = b.addLibrary(.{
         .name = "libluajit",
@@ -400,7 +413,7 @@ pub fn build(b: *std.Build) !void {
         "src/lib_ffi.c",
         "src/lib_init.c",
     };
-    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags.items });
+    for (libluajitSources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags });
     if (targetSys == .windows) {
         libluajit.addObjectFile(ljvm);
     } else {
@@ -431,7 +444,7 @@ pub fn build(b: *std.Build) !void {
         }),
     });
     luajit.linkLibC();
-    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags.items });
+    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags });
     luajit.addIncludePath(b.path("src"));
     luajit.addIncludePath(luajith.dirname());
     luajit.linkLibrary(libluajit);
