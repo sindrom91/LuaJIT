@@ -1,3 +1,26 @@
+// Working builds:
+// zig build -Dtarget=x86-windows
+// zig build -Dtarget=x86_64-windows
+// zig build -Dtarget=aarch64-windows
+// zig build -Dtarget=x86-linux-musl
+// zig build -Dtarget=x86_64-linux-musl
+// zig build -Dtarget=arm-linux-musleabihf
+// zig build -Dtarget=aarch64-linux-musl
+// zig build -Dtarget=aarch64_be-linux-musl
+// zig build -Dtarget=powerpc-linux-musleabi
+// zig build -Dtarget=powerpc-linux-musleabihf
+
+// Non-working builds:
+// zig build -Dtarget=arm-linux-musleabi
+// zig build -Dtarget=mips-linux-musleabi
+// zig build -Dtarget=mips-linux-musleabihf
+// zig build -Dtarget=mipsel-linux-musleabi
+// zig build -Dtarget=mipsel-linux-musleabihf
+// zig build -Dtarget=mips64-linux-musleabi
+// zig build -Dtarget=mips64-linux-musleabihf
+// zig build -Dtarget=mips64el-linux-musleabi
+// zig build -Dtarget=mips64el-linux-musleabihf
+
 const std = @import("std");
 
 fn zigTripleAlloc(gpa: std.mem.Allocator, t: std.Target) ![]u8 {
