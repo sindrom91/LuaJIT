@@ -23,23 +23,23 @@
 
 const std = @import("std");
 
-fn getTriple(gpa: std.mem.Allocator, t: std.Target) []u8 {
+fn getTriple(alloc: std.mem.Allocator, t: std.Target) []u8 {
     if (t.abi == .none)
-        return std.fmt.allocPrint(gpa, "{s}-{s}", .{
+        return std.fmt.allocPrint(alloc, "{s}-{s}", .{
             @tagName(t.cpu.arch),
             @tagName(t.os.tag),
         }) catch unreachable;
-    return std.fmt.allocPrint(gpa, "{s}-{s}-{s}", .{
+    return std.fmt.allocPrint(alloc, "{s}-{s}-{s}", .{
         @tagName(t.cpu.arch),
         @tagName(t.os.tag),
         @tagName(t.abi),
     }) catch unreachable;
 }
 
-fn getTargetDefines(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
+fn getTargetDefines(alloc: std.mem.Allocator, triple: []const u8) ![]u8 {
     var argv: std.ArrayList([]const u8) = .empty;
-    defer argv.deinit(gpa);
-    try argv.appendSlice(gpa, &.{
+    defer argv.deinit(alloc);
+    try argv.appendSlice(alloc, &.{
         "zig",
         "cc",
         "-E",
@@ -52,13 +52,13 @@ fn getTargetDefines(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
         "src/lj_arch.h",
     });
 
-    var child = std.process.Child.init(argv.items, gpa);
+    var child = std.process.Child.init(argv.items, alloc);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
     try child.spawn();
 
-    const out = try child.stdout.?.readToEndAlloc(gpa, 10 * 1024 * 1024);
-    const err = try child.stderr.?.readToEndAlloc(gpa, 128 * 1024);
+    const out = try child.stdout.?.readToEndAlloc(alloc, 10 * 1024 * 1024);
+    const err = try child.stderr.?.readToEndAlloc(alloc, 128 * 1024);
     const term = try child.wait();
 
     switch (term) {
