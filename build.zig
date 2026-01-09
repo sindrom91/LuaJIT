@@ -23,10 +23,17 @@
 
 const std = @import("std");
 
-fn zigTripleAlloc(gpa: std.mem.Allocator, t: std.Target) ![]u8 {
+fn getTriple(gpa: std.mem.Allocator, t: std.Target) []u8 {
     if (t.abi == .none)
-        return std.fmt.allocPrint(gpa, "{s}-{s}", .{ @tagName(t.cpu.arch), @tagName(t.os.tag) });
-    return std.fmt.allocPrint(gpa, "{s}-{s}-{s}", .{ @tagName(t.cpu.arch), @tagName(t.os.tag), @tagName(t.abi) });
+        return std.fmt.allocPrint(gpa, "{s}-{s}", .{
+            @tagName(t.cpu.arch),
+            @tagName(t.os.tag),
+        }) catch unreachable;
+    return std.fmt.allocPrint(gpa, "{s}-{s}-{s}", .{
+        @tagName(t.cpu.arch),
+        @tagName(t.os.tag),
+        @tagName(t.abi),
+    }) catch unreachable;
 }
 
 fn getTargetDefines(gpa: std.mem.Allocator, triple: []const u8) ![]u8 {
@@ -143,7 +150,7 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
-    const triple = zigTripleAlloc(alloc, target.result);
+    const triple = getTriple(alloc, target.result);
     defer alloc.free(triple);
     const target_defines = try getTargetDefines(alloc, triple);
     const target_ljarch = getTargetLjarch(target_defines);
