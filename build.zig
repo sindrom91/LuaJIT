@@ -119,6 +119,7 @@ fn getTargetLjarch(target_defines: []const u8) []const u8 {
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const alloc = b.allocator;
 
     const arch = target.result.cpu.arch;
     const target_sys = target.result.os.tag;
@@ -129,65 +130,65 @@ pub fn build(b: *std.Build) !void {
         // TODO: This is probably not the same as what Makefile does.
         switch (target_sys) {
             .windows => {
-                try host_flags.append(b.allocator, "-malign-double");
-                try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
+                try host_flags.append(alloc, "-malign-double");
+                try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
             },
-            .linux => try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_LINUX"),
-            .macos => try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX"),
+            .linux => try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_LINUX"),
+            .macos => try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OSX"),
             .ios => {
-                try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OSX");
-                try host_flags.append(b.allocator, "-DTARGET_OS_IPHONE=1");
+                try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OSX");
+                try host_flags.append(alloc, "-DTARGET_OS_IPHONE=1");
             },
-            else => try host_flags.append(b.allocator, "-DLUAJIT_OS=LUAJIT_OS_OTHER"),
+            else => try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OTHER"),
         }
     }
 
-    const triple = try zigTripleAlloc(b.allocator, target.result);
-    defer b.allocator.free(triple);
-    const target_defines = try getTargetDefines(b.allocator, triple);
+    const triple = zigTripleAlloc(alloc, target.result);
+    defer alloc.free(triple);
+    const target_defines = try getTargetDefines(alloc, triple);
     const target_ljarch = getTargetLjarch(target_defines);
     var dasm_arch = target_ljarch;
 
     // Set up DASM flags.
     var dasm_flags: std.ArrayList([]const u8) = .empty;
     if (defineEquals(target_defines, "LJ_LE", "1")) {
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_LE" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "ENDIAN_LE" });
     } else {
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ENDIAN_BE" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "ENDIAN_BE" });
     }
     if (defineEquals(target_defines, "LJ_ARCH_BITS", "64"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "P64" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "P64" });
     if (defineEquals(target_defines, "LJ_HASJIT", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "JIT" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "JIT" });
     if (defineEquals(target_defines, "LJ_HASFFI", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FFI" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "FFI" });
     if (defineEquals(target_defines, "LJ_DUALNUM", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "DUALNUM" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "DUALNUM" });
     if (defineEquals(target_defines, "LJ_ARCH_HASFPU", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "FPU" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "FPU" });
     if (!defineEquals(target_defines, "LJ_ABI_SOFTFP", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "HFABI" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "HFABI" });
     if (target_sys == .windows)
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "WIN" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "WIN" });
     if (defineEquals(target_defines, "LJ_NO_UNWIND", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "NO_UNWIND" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "NO_UNWIND" });
     if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PAUTH" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "PAUTH" });
     if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(target_defines, "LJ_FR2", "1"))
         dasm_arch = "x86";
     if (std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios)
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "IOS" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "IOS" });
     if (hasDefine(target_defines, "LJ_TARGET_MIPSR6"))
-        try dasm_flags.appendSlice(b.allocator, &.{ "-D", "MIPSR6" });
+        try dasm_flags.appendSlice(alloc, &.{ "-D", "MIPSR6" });
     if (std.mem.eql(u8, target_ljarch, "ppc")) {
         if (defineEquals(target_defines, "LJ_ARCH_SQRT", "1"))
-            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "SQRT" });
+            try dasm_flags.appendSlice(alloc, &.{ "-D", "SQRT" });
         if (defineEquals(target_defines, "LJ_ARCH_ROUND", "1"))
-            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "ROUND" });
+            try dasm_flags.appendSlice(alloc, &.{ "-D", "ROUND" });
         if (defineEquals(target_defines, "LJ_ARCH_PPC32ON64", "1"))
-            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "GPR64" });
+            try dasm_flags.appendSlice(alloc, &.{ "-D", "GPR64" });
         if (target_sys == .ps3)
-            try dasm_flags.appendSlice(b.allocator, &.{ "-D", "PPE", "-D", "TOC" });
+            try dasm_flags.appendSlice(alloc, &.{ "-D", "PPE", "-D", "TOC" });
     }
 
     const minilua = b.addExecutable(.{
@@ -205,7 +206,7 @@ pub fn build(b: *std.Build) !void {
     gen_buildvm_arch.addArgs(dasm_flags.items);
     gen_buildvm_arch.addArg("-o");
     const buildvm_arch = gen_buildvm_arch.addOutputFileArg("generated/buildvm_arch.h");
-    const dasc_file = try std.mem.concat(b.allocator, u8, &.{ "src/vm_", dasm_arch, ".dasc" });
+    const dasc_file = try std.mem.concat(alloc, u8, &.{ "src/vm_", dasm_arch, ".dasc" });
     gen_buildvm_arch.addFileArg(b.path(dasc_file));
 
     const gen_relver = b.addSystemCommand(&.{ "git", "show", "-s", "--format=%ct", "--output" });
@@ -222,33 +223,33 @@ pub fn build(b: *std.Build) !void {
 
     // Set up HOST flags.
     if (hasDefine(target_defines, "LJ_TARGET_ARM64") and hasDefine(target_defines, "__AARCH64EB__")) {
-        try host_flags.append(b.allocator, "-D__AARCH64EB__=1");
+        try host_flags.append(alloc, "-D__AARCH64EB__=1");
     } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
         if (defineEquals(target_defines, "LJ_LE", "1")) {
-            try host_flags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
+            try host_flags.append(alloc, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
         } else {
-            try host_flags.append(b.allocator, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
+            try host_flags.append(alloc, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
         }
     } else if (hasDefine(target_defines, "LJ_TARGET_MIPS") and hasDefine(target_defines, "MIPSEL")) {
-        try host_flags.append(b.allocator, "-D__MIPSEL__=1");
+        try host_flags.append(alloc, "-D__MIPSEL__=1");
     } else if (defineEquals(target_defines, "LJ_TARGET_PS3", "1")) {
-        try host_flags.append(b.allocator, "-D__CELLOS_LV2__");
+        try host_flags.append(alloc, "-D__CELLOS_LV2__");
     }
     if (defineEquals(target_defines, "LJ_ARCH_HASFPU", "1")) {
-        try host_flags.append(b.allocator, "-DLJ_ARCH_HASFPU=1");
+        try host_flags.append(alloc, "-DLJ_ARCH_HASFPU=1");
     } else {
-        try host_flags.append(b.allocator, "-DLJ_ARCH_HASFPU=0");
+        try host_flags.append(alloc, "-DLJ_ARCH_HASFPU=0");
     }
     if (defineEquals(target_defines, "LJ_ABI_SOFTFP", "1")) {
-        try host_flags.append(b.allocator, "-DLJ_ABI_SOFTFP=1");
+        try host_flags.append(alloc, "-DLJ_ABI_SOFTFP=1");
     } else {
-        try host_flags.append(b.allocator, "-DLJ_ABI_SOFTFP=0");
+        try host_flags.append(alloc, "-DLJ_ABI_SOFTFP=0");
     }
     if (defineEquals(target_defines, "LJ_NO_UNWIND", "1")) {
-        try host_flags.append(b.allocator, "-DLUAJIT_NO_UNWIND");
+        try host_flags.append(alloc, "-DLUAJIT_NO_UNWIND");
     }
     if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1")) {
-        try host_flags.append(b.allocator, "-DLJ_ABI_PAUTH=1");
+        try host_flags.append(alloc, "-DLJ_ABI_PAUTH=1");
     }
 
     if (target.result.ptrBitWidth() == 32) {
@@ -278,8 +279,8 @@ pub fn build(b: *std.Build) !void {
         "src/host/buildvm_fold.c",
     };
 
-    try host_flags.append(b.allocator, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
-    try host_flags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
+    try host_flags.append(alloc, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
+    try host_flags.append(alloc, try std.mem.concat(alloc, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
 
     for (buildvm_sources) |f| buildvm.root_module.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
     buildvm.root_module.addIncludePath(b.path("src"));
