@@ -195,10 +195,10 @@ pub fn build(b: *std.Build) !void {
         .root_module = b.createModule(.{
             .target = b.graph.host, // This is always executed on the host system!
             .optimize = std.builtin.OptimizeMode.ReleaseFast, // TODO: Does not work in Debug.
+            .link_libc = true,
         }),
     });
-    minilua.linkLibC();
-    minilua.addCSourceFile(.{ .file = b.path("src/host/minilua.c") });
+    minilua.root_module.addCSourceFile(.{ .file = b.path("src/host/minilua.c") });
 
     const gen_buildvm_arch = b.addRunArtifact(minilua);
     gen_buildvm_arch.addFileArg(b.path("dynasm/dynasm.lua"));
@@ -281,11 +281,11 @@ pub fn build(b: *std.Build) !void {
     try host_flags.append(b.allocator, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
     try host_flags.append(b.allocator, try std.mem.concat(b.allocator, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
 
-    for (buildvm_sources) |f| buildvm.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
-    buildvm.addIncludePath(b.path("src"));
-    buildvm.addIncludePath(b.path("src/host"));
-    buildvm.addIncludePath(buildvm_arch.dirname());
-    buildvm.addIncludePath(luajith.dirname());
+    for (buildvm_sources) |f| buildvm.root_module.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
+    buildvm.root_module.addIncludePath(b.path("src"));
+    buildvm.root_module.addIncludePath(b.path("src/host"));
+    buildvm.root_module.addIncludePath(buildvm_arch.dirname());
+    buildvm.root_module.addIncludePath(luajith.dirname());
     buildvm.step.dependOn(&gen_buildvm_arch.step);
     buildvm.step.dependOn(&gen_version.step);
 
@@ -337,9 +337,7 @@ pub fn build(b: *std.Build) !void {
 
     const gen_ljvm = b.addRunArtifact(buildvm);
     gen_ljvm.addArgs(&.{ "-m", ljvm_mode, "-o" });
-    const ljvm = gen_ljvm.addOutputFileArg(
-        if (target_sys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S",
-    );
+    const ljvm = gen_ljvm.addOutputFileArg(if (target_sys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S");
 
     const cflags = if (arch == .arm)
         &[_][]const u8{
@@ -435,20 +433,20 @@ pub fn build(b: *std.Build) !void {
         "src/lib_ffi.c",
         "src/lib_init.c",
     };
-    for (libluajit_sources) |f| libluajit.addCSourceFile(.{ .file = b.path(f), .flags = cflags });
+    for (libluajit_sources) |f| libluajit.root_module.addCSourceFile(.{ .file = b.path(f), .flags = cflags });
     if (target_sys == .windows) {
-        libluajit.addObjectFile(ljvm);
+        libluajit.root_module.addObjectFile(ljvm);
     } else {
-        libluajit.addAssemblyFile(ljvm);
+        libluajit.root_module.addAssemblyFile(ljvm);
     }
-    libluajit.addIncludePath(b.path("src"));
-    libluajit.addIncludePath(b.path("src/host"));
-    libluajit.addIncludePath(folddef.dirname());
-    libluajit.addIncludePath(libdef.dirname());
-    libluajit.addIncludePath(ffdef.dirname());
-    libluajit.addIncludePath(bcdef.dirname());
-    libluajit.addIncludePath(recdef.dirname());
-    libluajit.addIncludePath(luajith.dirname());
+    libluajit.root_module.addIncludePath(b.path("src"));
+    libluajit.root_module.addIncludePath(b.path("src/host"));
+    libluajit.root_module.addIncludePath(folddef.dirname());
+    libluajit.root_module.addIncludePath(libdef.dirname());
+    libluajit.root_module.addIncludePath(ffdef.dirname());
+    libluajit.root_module.addIncludePath(bcdef.dirname());
+    libluajit.root_module.addIncludePath(recdef.dirname());
+    libluajit.root_module.addIncludePath(luajith.dirname());
 
     libluajit.step.dependOn(&gen_folddef.step);
     libluajit.step.dependOn(&gen_libdef.step);
@@ -466,14 +464,14 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         }),
     });
-    luajit.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags });
-    luajit.addIncludePath(b.path("src"));
-    luajit.addIncludePath(luajith.dirname());
-    luajit.linkLibrary(libluajit);
+    luajit.root_module.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags });
+    luajit.root_module.addIncludePath(b.path("src"));
+    luajit.root_module.addIncludePath(luajith.dirname());
+    luajit.root_module.linkLibrary(libluajit);
     luajit.step.dependOn(&gen_version.step);
 
     if (target_sys == .linux) {
-        luajit.linkSystemLibrary("unwind");
+        luajit.root_module.linkSystemLibrary("unwind", .{});
     }
 
     b.installArtifact(luajit);
