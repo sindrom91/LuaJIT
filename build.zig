@@ -453,6 +453,24 @@ pub fn build(b: *std.Build) !void {
     } else {
         libluajit.root_module.addAssemblyFile(ljvm);
     }
+
+    // This is a workaround for Zig not having __aeabi_cdcmp* implementations in compiler runtime.
+    if (arch == .arm) {
+        const wf = b.addWriteFiles();
+        const cdcmp_src = wf.add("cdcmp.zig", cdcmp);
+        const cdcmp_mod = b.createModule(.{
+            .root_source_file = cdcmp_src,
+            .target = target,
+            .optimize = optimize,
+        });
+
+        const zig_obj = b.addObject(.{
+            .name = "zig_part",
+            .root_module = cdcmp_mod,
+        });
+        libluajit.addObject(zig_obj);
+    }
+
     libluajit.root_module.addIncludePath(b.path("src"));
     libluajit.root_module.addIncludePath(b.path("src/host"));
     libluajit.root_module.addIncludePath(folddef.dirname());
@@ -490,3 +508,115 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(luajit);
 }
+
+// Implementation of __aeabi_cdcmple and __aeabi_cdcmpeq, required for ARM build.
+const cdcmp =
+    \\ const std = @import("std");
+    \\
+    \\ pub const LE = enum(i32) {
+    \\     Less = -1,
+    \\     Equal = 0,
+    \\     Greater = 1,
+    \\
+    \\     const Unordered: LE = .Greater;
+    \\ };
+    \\
+    \\ pub inline fn cmpf2(comptime T: type, comptime RT: type, a: T, b: T) RT {
+    \\     const bits = @typeInfo(T).float.bits;
+    \\     const srep_t = std.meta.Int(.signed, bits);
+    \\     const rep_t = std.meta.Int(.unsigned, bits);
+    \\
+    \\     const significandBits = std.math.floatMantissaBits(T);
+    \\     const exponentBits = std.math.floatExponentBits(T);
+    \\     const signBit = (@as(rep_t, 1) << (significandBits + exponentBits));
+    \\     const absMask = signBit - 1;
+    \\     const infT = comptime std.math.inf(T);
+    \\     const infRep = @as(rep_t, @bitCast(infT));
+    \\
+    \\     const aInt = @as(srep_t, @bitCast(a));
+    \\     const bInt = @as(srep_t, @bitCast(b));
+    \\     const aAbs = @as(rep_t, @bitCast(aInt)) & absMask;
+    \\     const bAbs = @as(rep_t, @bitCast(bInt)) & absMask;
+    \\
+    \\     // If either a or b is NaN, they are unordered.
+    \\     if (aAbs > infRep or bAbs > infRep) return RT.Unordered;
+    \\
+    \\     // If a and b are both zeros, they are equal.
+    \\     if ((aAbs | bAbs) == 0) return .Equal;
+    \\
+    \\     // If at least one of a and b is positive, we get the same result comparing
+    \\     // a and b as signed integers as we would with a floating-point compare.
+    \\     if ((aInt & bInt) >= 0) {
+    \\         if (aInt < bInt) {
+    \\             return .Less;
+    \\         } else if (aInt == bInt) {
+    \\             return .Equal;
+    \\         } else return .Greater;
+    \\     } else {
+    \\         // Otherwise, both are negative, so we need to flip the sense of the
+    \\         // comparison to get the correct result.  (This assumes a twos- or ones-
+    \\         // complement integer representation; if integers are represented in a
+    \\         // sign-magnitude representation, then this flip is incorrect).
+    \\         if (aInt > bInt) {
+    \\             return .Less;
+    \\         } else if (aInt == bInt) {
+    \\             return .Equal;
+    \\         } else return .Greater;
+    \\     }
+    \\ }
+    \\
+    \\ fn __aeabi_dcmpeq(a: f64, b: f64) callconv(.{ .arm_aapcs = .{} }) i32 {
+    \\     return @intFromBool(cmpf2(f64, LE, a, b) == .Equal);
+    \\ }
+    \\
+    \\ fn __aeabi_dcmplt(a: f64, b: f64) callconv(.{ .arm_aapcs = .{} }) i32 {
+    \\     return @intFromBool(cmpf2(f64, LE, a, b) == .Less);
+    \\ }
+    \\
+    \\ fn __aeabi_cdcmpeq_check_nan(a: f64, b: f64) callconv(.c) i32 {
+    \\     return @intFromBool(std.math.isNan(a) or std.math.isNan(b));
+    \\ }
+    \\
+    \\ export fn __aeabi_cdcmpeq(_: f64, _: f64) callconv(.naked) void {
+    \\     const apsr_c = 0x20000000;
+    \\     asm volatile (
+    \\         \\        push {r0-r3, lr}
+    \\         \\        bl %[__aeabi_cdcmpeq_check_nan]
+    \\         \\        cmp r0, #1
+    \\         \\        pop {r0-r3, lr}
+    \\         \\        bne %[__aeabi_cdcmple]
+    \\         \\        msr APSR_nzcvq, %[APSR_C]
+    \\         \\        bx lr
+    \\         :
+    \\         : [__aeabi_cdcmple] "X" (&__aeabi_cdcmple),
+    \\           [__aeabi_cdcmpeq_check_nan] "X" (&__aeabi_cdcmpeq_check_nan),
+    \\           [APSR_C] "i" (apsr_c),
+    \\     );
+    \\ }
+    \\
+    \\ export fn __aeabi_cdcmple(_: f64, _: f64) callconv(.naked) void {
+    \\     const apsr_c = 0x20000000;
+    \\     const apsr_z = 0x40000000;
+    \\     asm volatile (
+    \\         \\        push {r0-r3, lr}
+    \\         \\        bl  %[__aeabi_dcmplt]
+    \\         \\        cmp r0, #1
+    \\         \\        moveq ip, #0
+    \\         \\        beq 1f
+    \\         \\        ldm sp, {r0-r3}
+    \\         \\        bl %[__aeabi_dcmpeq]
+    \\         \\        cmp r0, #1
+    \\         \\        moveq ip, %[APSR_CZ]
+    \\         \\        movne ip, %[APSR_C]
+    \\         \\1:
+    \\         \\        msr APSR_nzcvq, ip
+    \\         \\        pop {r0-r3}
+    \\         \\        pop {pc}
+    \\         :
+    \\         : [__aeabi_dcmplt] "X" (&__aeabi_dcmplt),
+    \\           [__aeabi_dcmpeq] "X" (&__aeabi_dcmpeq),
+    \\           [APSR_C] "i" (apsr_c),
+    \\           [APSR_CZ] "i" (apsr_c | apsr_z),
+    \\     );
+    \\ }
+;
