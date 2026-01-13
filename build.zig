@@ -140,13 +140,19 @@ pub fn build(b: *std.Build) !void {
                 try host_flags.append(alloc, "-malign-double");
                 try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
             },
-            .linux => try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_LINUX"),
-            .macos => try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OSX"),
+            .linux => {
+                try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_LINUX");
+            },
+            .macos => {
+                try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OSX");
+            },
             .ios => {
                 try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OSX");
                 try host_flags.append(alloc, "-DTARGET_OS_IPHONE=1");
             },
-            else => try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OTHER"),
+            else => {
+                try host_flags.append(alloc, "-DLUAJIT_OS=LUAJIT_OS_OTHER");
+            },
         }
     }
 
