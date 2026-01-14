@@ -133,6 +133,14 @@ fn addFlags(flags: *std.ArrayList([]const u8), flag1: []const u8, flag2: []const
     flags.append(allocator, flag2) catch unreachable;
 }
 
+fn join2(s1: []const u8, s2: []const u8) []const u8 {
+    return std.mem.concat(allocator, u8, &.{ s1, s2 }) catch unreachable;
+}
+
+fn join3(s1: []const u8, s2: []const u8, s3: []const u8) []const u8 {
+    return std.mem.concat(allocator, u8, &.{ s1, s2, s3 }) catch unreachable;
+}
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -232,7 +240,7 @@ pub fn build(b: *std.Build) !void {
     gen_buildvm_arch.addArgs(dasm_flags.items);
     gen_buildvm_arch.addArg("-o");
     const buildvm_arch = gen_buildvm_arch.addOutputFileArg("generated/buildvm_arch.h");
-    const dasc_file = try std.mem.concat(alloc, u8, &.{ "src/vm_", dasm_arch, ".dasc" });
+    const dasc_file = join3("src/vm_", dasm_arch, ".dasc");
     gen_buildvm_arch.addFileArg(b.path(dasc_file));
 
     const gen_relver = b.addSystemCommand(&.{ "git", "show", "-s", "--format=%ct", "--output" });
@@ -310,7 +318,7 @@ pub fn build(b: *std.Build) !void {
     };
 
     addFlag(&host_flags, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
-    addFlag(&host_flags, try std.mem.concat(alloc, u8, &.{ "-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch }));
+    addFlag(&host_flags, join2("-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch));
 
     for (buildvm_sources) |f| buildvm.root_module.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
     buildvm.root_module.addIncludePath(b.path("src"));
