@@ -5,21 +5,20 @@
 // zig build -Dtarget=x86-linux-musl
 // zig build -Dtarget=x86_64-linux-musl
 // zig build -Dtarget=arm-linux-musleabihf
+// zig build -Dtarget=arm-linux-musleabi
 // zig build -Dtarget=aarch64-linux-musl
 // zig build -Dtarget=aarch64_be-linux-musl
 // zig build -Dtarget=powerpc-linux-musleabi
 // zig build -Dtarget=powerpc-linux-musleabihf
-
-// Non-working builds:
-// zig build -Dtarget=arm-linux-musleabi
 // zig build -Dtarget=mips-linux-musleabi
 // zig build -Dtarget=mips-linux-musleabihf
 // zig build -Dtarget=mipsel-linux-musleabi
 // zig build -Dtarget=mipsel-linux-musleabihf
-// zig build -Dtarget=mips64-linux-musleabi
-// zig build -Dtarget=mips64-linux-musleabihf
-// zig build -Dtarget=mips64el-linux-musleabi
-// zig build -Dtarget=mips64el-linux-musleabihf
+// zig build -Dtarget=mips64-linux-muslabi64
+// zig build -Dtarget=mips64el-linux-muslabi64
+
+// TODO: It is unclear how to invoke MIPS64 soft-float build.
+//       mips64-linux-musleabi/gnueabi does not work.
 
 const std = @import("std");
 
@@ -264,6 +263,10 @@ pub fn build(b: *std.Build) !void {
     if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1")) {
         try host_flags.append(alloc, "-DLJ_ABI_PAUTH=1");
     }
+    if (arch.isMIPS32()) {
+        // WORKAROUND: LLVM assembler cannot handle writable EH frames.
+        try host_flags.append(alloc, "-DLJ_NO_UNWIND=1");
+    }
 
     if (target.result.ptrBitWidth() == 32) {
         if (b.graph.host.result.ptrBitWidth() == 64) {
@@ -353,8 +356,8 @@ pub fn build(b: *std.Build) !void {
     gen_ljvm.addArgs(&.{ "-m", ljvm_mode, "-o" });
     const ljvm = gen_ljvm.addOutputFileArg(if (target_sys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S");
 
-    const cflags = if (arch == .arm)
-        &[_][]const u8{
+    const cflags = switch (arch) {
+        .arm => &[_][]const u8{
             "-DLUAJIT_UNWIND_EXTERNAL",
             "-D__floatdidf=__aeabi_l2d",
             "-D__floatundidf=__aeabi_ul2d",
@@ -364,9 +367,16 @@ pub fn build(b: *std.Build) !void {
             "-D__fixunsdfdi=__aeabi_d2ulz",
             "-D__fixsfdi=__aeabi_f2lz",
             "-D__fixunssfdi=__aeabi_f2ulz",
-        }
-    else
-        &[_][]const u8{"-DLUAJIT_UNWIND_EXTERNAL"};
+        },
+        .mips, .mipsel, .mips64, .mips64el => &[_][]const u8{
+            "-DLUAJIT_UNWIND_EXTERNAL",
+            // WORKAROUND: __clear_cache is not declared in any header.
+            "-Wno-error=implicit-function-declaration",
+        },
+        else => &[_][]const u8{
+            "-DLUAJIT_UNWIND_EXTERNAL",
+        },
+    };
 
     const libluajit = b.addLibrary(.{
         .name = "libluajit",
