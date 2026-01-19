@@ -135,8 +135,6 @@ pub fn build(b: *std.Build) !void {
     const luajith = gen_version.addOutputFileArg("generated/luajit.h");
     gen_version.step.dependOn(&gen_relver.step);
 
-    var host = b.graph.host;
-
     // Set up HOST flags.
     if (hasDefine(target_defines, "LJ_TARGET_ARM64") and hasDefine(target_defines, "__AARCH64EB__")) {
         addFlag(&host_flags, "-D__AARCH64EB__=1");
@@ -172,21 +170,19 @@ pub fn build(b: *std.Build) !void {
         addFlag(&host_flags, "-DLJ_NO_UNWIND=1");
     }
 
-    if (target.result.ptrBitWidth() == 32) {
-        if (b.graph.host.result.ptrBitWidth() == 64) {
-            // TODO: This should work for other architectures, not just x86_64.
-            host = b.resolveTargetQuery(.{
-                .cpu_arch = .x86,
-                .os_tag = host.result.os.tag,
-                .abi = host.result.abi,
-            });
-        }
-    }
-
     const buildvm = b.addExecutable(.{
         .name = "buildvm",
         .root_module = b.createModule(.{
-            .target = host, // This is always executed on the host system!
+            // This is always executed on the host system. If the target system
+            // is 32-bit and the host system is 64-bit, buildvm needs to be
+            // compiled in 32-bit mode.
+            //
+            // TODO: This should work for other architectures, not just x86_64.
+            .target = if (target.result.ptrBitWidth() == 32 and b.graph.host.result.ptrBitWidth() == 64) b.resolveTargetQuery(.{
+                .cpu_arch = .x86,
+                .os_tag = b.graph.host.result.os.tag,
+                .abi = b.graph.host.result.abi,
+            }) else b.graph.host,
             .optimize = std.builtin.OptimizeMode.ReleaseFast, // TODO: Does not work in Debug.
             .link_libc = true,
         }),
