@@ -22,124 +22,7 @@
 
 const std = @import("std");
 
-fn getTriple(t: std.Target) []u8 {
-    if (t.abi == .none)
-        return std.fmt.allocPrint(alloc, "{s}-{s}", .{
-            @tagName(t.cpu.arch),
-            @tagName(t.os.tag),
-        }) catch unreachable;
-    return std.fmt.allocPrint(alloc, "{s}-{s}-{s}", .{
-        @tagName(t.cpu.arch),
-        @tagName(t.os.tag),
-        @tagName(t.abi),
-    }) catch unreachable;
-}
-
-fn getTargetDefines(triple: []const u8) ![]u8 {
-    var argv: std.ArrayList([]const u8) = .empty;
-    defer argv.deinit(alloc);
-    try argv.appendSlice(alloc, &.{
-        "zig",
-        "cc",
-        "-E",
-        "-dM",
-        "-target",
-        triple,
-        "-D_FILE_OFFSET_BITS=64",
-        "-D_LARGEFILE_SOURCE",
-        "-U_FORTIFY_SOURCE",
-        "src/lj_arch.h",
-    });
-
-    var child = std.process.Child.init(argv.items, alloc);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-    try child.spawn();
-
-    const out = try child.stdout.?.readToEndAlloc(alloc, 10 * 1024 * 1024);
-    const err = try child.stderr.?.readToEndAlloc(alloc, 128 * 1024);
-    const term = try child.wait();
-
-    switch (term) {
-        .Exited => |code| if (code != 0) {
-            std.debug.print("preprocess failed ({d}): {s}\n", .{ code, err });
-            return error.PreprocessFailed;
-        },
-        else => {
-            std.debug.print("preprocess failed: {s}\n", .{err});
-            return error.PreprocessFailed;
-        },
-    }
-    return out;
-}
-
-fn hasDefine(target_defines: []const u8, name: []const u8) bool {
-    var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
-    while (lines.next()) |line_raw| {
-        const line = std.mem.trim(u8, line_raw, " \t\r");
-        if (!std.mem.startsWith(u8, line, "#define ")) continue;
-        var it = std.mem.tokenizeAny(u8, line[8..], " \t(");
-        if (std.mem.eql(u8, it.next() orelse continue, name)) return true;
-    }
-    return false;
-}
-
-fn defineEquals(target_defines: []const u8, name: []const u8, value: []const u8) bool {
-    var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
-    while (lines.next()) |line_raw| {
-        const line = std.mem.trim(u8, line_raw, " \t\r");
-        if (!std.mem.startsWith(u8, line, "#define ")) continue;
-        var it = std.mem.tokenizeAny(u8, line[8..], " \t(");
-        const n = it.next() orelse continue;
-        if (!std.mem.eql(u8, n, name)) continue;
-        const v = it.next() orelse "1";
-        return std.mem.eql(u8, v, value);
-    }
-    return false;
-}
-
-fn getTargetLjarch(target_defines: []const u8) []const u8 {
-    if (hasDefine(target_defines, "LJ_TARGET_X64")) {
-        return "x64";
-    } else if (hasDefine(target_defines, "LJ_TARGET_X86")) {
-        return "x86";
-    } else if (hasDefine(target_defines, "LJ_TARGET_ARM")) {
-        return "arm";
-    } else if (hasDefine(target_defines, "LJ_TARGET_ARM64")) {
-        return "arm64";
-    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
-        return "ppc";
-    } else if (hasDefine(target_defines, "LJ_TARGET_MIPS")) {
-        if (hasDefine(target_defines, "LJ_TARGET_MIPS64")) {
-            return "mips64";
-        } else {
-            return "mips";
-        }
-    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
-        return "ppc";
-    } else {
-        @panic("Unsupported architecture.");
-    }
-}
-
 var alloc: std.mem.Allocator = undefined;
-
-fn addFlag(flags: *std.ArrayList([]const u8), flag: []const u8) void {
-    flags.append(alloc, flag) catch unreachable;
-}
-
-fn addFlags(flags: *std.ArrayList([]const u8), flag1: []const u8, flag2: []const u8) void {
-    flags.append(alloc, flag1) catch unreachable;
-    flags.append(alloc, flag2) catch unreachable;
-}
-
-fn join2(s1: []const u8, s2: []const u8) []const u8 {
-    return std.mem.concat(alloc, u8, &.{ s1, s2 }) catch unreachable;
-}
-
-fn join3(s1: []const u8, s2: []const u8, s3: []const u8) []const u8 {
-    return std.mem.concat(alloc, u8, &.{ s1, s2, s3 }) catch unreachable;
-}
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -538,6 +421,123 @@ pub fn build(b: *std.Build) !void {
     }
 
     b.installArtifact(luajit);
+}
+
+fn addFlag(flags: *std.ArrayList([]const u8), flag: []const u8) void {
+    flags.append(alloc, flag) catch unreachable;
+}
+
+fn addFlags(flags: *std.ArrayList([]const u8), flag1: []const u8, flag2: []const u8) void {
+    flags.append(alloc, flag1) catch unreachable;
+    flags.append(alloc, flag2) catch unreachable;
+}
+
+fn join2(s1: []const u8, s2: []const u8) []const u8 {
+    return std.mem.concat(alloc, u8, &.{ s1, s2 }) catch unreachable;
+}
+
+fn join3(s1: []const u8, s2: []const u8, s3: []const u8) []const u8 {
+    return std.mem.concat(alloc, u8, &.{ s1, s2, s3 }) catch unreachable;
+}
+
+fn getTriple(t: std.Target) []u8 {
+    if (t.abi == .none)
+        return std.fmt.allocPrint(alloc, "{s}-{s}", .{
+            @tagName(t.cpu.arch),
+            @tagName(t.os.tag),
+        }) catch unreachable;
+    return std.fmt.allocPrint(alloc, "{s}-{s}-{s}", .{
+        @tagName(t.cpu.arch),
+        @tagName(t.os.tag),
+        @tagName(t.abi),
+    }) catch unreachable;
+}
+
+fn getTargetDefines(triple: []const u8) ![]u8 {
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(alloc);
+    try argv.appendSlice(alloc, &.{
+        "zig",
+        "cc",
+        "-E",
+        "-dM",
+        "-target",
+        triple,
+        "-D_FILE_OFFSET_BITS=64",
+        "-D_LARGEFILE_SOURCE",
+        "-U_FORTIFY_SOURCE",
+        "src/lj_arch.h",
+    });
+
+    var child = std.process.Child.init(argv.items, alloc);
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
+    try child.spawn();
+
+    const out = try child.stdout.?.readToEndAlloc(alloc, 10 * 1024 * 1024);
+    const err = try child.stderr.?.readToEndAlloc(alloc, 128 * 1024);
+    const term = try child.wait();
+
+    switch (term) {
+        .Exited => |code| if (code != 0) {
+            std.debug.print("preprocess failed ({d}): {s}\n", .{ code, err });
+            return error.PreprocessFailed;
+        },
+        else => {
+            std.debug.print("preprocess failed: {s}\n", .{err});
+            return error.PreprocessFailed;
+        },
+    }
+    return out;
+}
+
+fn hasDefine(target_defines: []const u8, name: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
+    while (lines.next()) |line_raw| {
+        const line = std.mem.trim(u8, line_raw, " \t\r");
+        if (!std.mem.startsWith(u8, line, "#define ")) continue;
+        var it = std.mem.tokenizeAny(u8, line[8..], " \t(");
+        if (std.mem.eql(u8, it.next() orelse continue, name)) return true;
+    }
+    return false;
+}
+
+fn defineEquals(target_defines: []const u8, name: []const u8, value: []const u8) bool {
+    var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
+    while (lines.next()) |line_raw| {
+        const line = std.mem.trim(u8, line_raw, " \t\r");
+        if (!std.mem.startsWith(u8, line, "#define ")) continue;
+        var it = std.mem.tokenizeAny(u8, line[8..], " \t(");
+        const n = it.next() orelse continue;
+        if (!std.mem.eql(u8, n, name)) continue;
+        const v = it.next() orelse "1";
+        return std.mem.eql(u8, v, value);
+    }
+    return false;
+}
+
+fn getTargetLjarch(target_defines: []const u8) []const u8 {
+    if (hasDefine(target_defines, "LJ_TARGET_X64")) {
+        return "x64";
+    } else if (hasDefine(target_defines, "LJ_TARGET_X86")) {
+        return "x86";
+    } else if (hasDefine(target_defines, "LJ_TARGET_ARM")) {
+        return "arm";
+    } else if (hasDefine(target_defines, "LJ_TARGET_ARM64")) {
+        return "arm64";
+    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
+        return "ppc";
+    } else if (hasDefine(target_defines, "LJ_TARGET_MIPS")) {
+        if (hasDefine(target_defines, "LJ_TARGET_MIPS64")) {
+            return "mips64";
+        } else {
+            return "mips";
+        }
+    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
+        return "ppc";
+    } else {
+        @panic("Unsupported architecture.");
+    }
 }
 
 // Implementation of __aeabi_cdcmple and __aeabi_cdcmpeq, required for ARM build.
