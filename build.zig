@@ -22,7 +22,7 @@
 
 const std = @import("std");
 
-fn getTriple(alloc: std.mem.Allocator, t: std.Target) []u8 {
+fn getTriple(t: std.Target) []u8 {
     if (t.abi == .none)
         return std.fmt.allocPrint(alloc, "{s}-{s}", .{
             @tagName(t.cpu.arch),
@@ -35,7 +35,7 @@ fn getTriple(alloc: std.mem.Allocator, t: std.Target) []u8 {
     }) catch unreachable;
 }
 
-fn getTargetDefines(alloc: std.mem.Allocator, triple: []const u8) ![]u8 {
+fn getTargetDefines(triple: []const u8) ![]u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(alloc);
     try argv.appendSlice(alloc, &.{
@@ -122,30 +122,29 @@ fn getTargetLjarch(target_defines: []const u8) []const u8 {
     }
 }
 
-var allocator: std.mem.Allocator = undefined;
+var alloc: std.mem.Allocator = undefined;
 
 fn addFlag(flags: *std.ArrayList([]const u8), flag: []const u8) void {
-    flags.append(allocator, flag) catch unreachable;
+    flags.append(alloc, flag) catch unreachable;
 }
 
 fn addFlags(flags: *std.ArrayList([]const u8), flag1: []const u8, flag2: []const u8) void {
-    flags.append(allocator, flag1) catch unreachable;
-    flags.append(allocator, flag2) catch unreachable;
+    flags.append(alloc, flag1) catch unreachable;
+    flags.append(alloc, flag2) catch unreachable;
 }
 
 fn join2(s1: []const u8, s2: []const u8) []const u8 {
-    return std.mem.concat(allocator, u8, &.{ s1, s2 }) catch unreachable;
+    return std.mem.concat(alloc, u8, &.{ s1, s2 }) catch unreachable;
 }
 
 fn join3(s1: []const u8, s2: []const u8, s3: []const u8) []const u8 {
-    return std.mem.concat(allocator, u8, &.{ s1, s2, s3 }) catch unreachable;
+    return std.mem.concat(alloc, u8, &.{ s1, s2, s3 }) catch unreachable;
 }
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const alloc = b.allocator;
-    allocator = b.allocator;
+    alloc = b.allocator;
 
     const arch = target.result.cpu.arch;
     const target_sys = target.result.os.tag;
@@ -175,9 +174,9 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
-    const triple = getTriple(alloc, target.result);
+    const triple = getTriple(target.result);
     defer alloc.free(triple);
-    const target_defines = try getTargetDefines(alloc, triple);
+    const target_defines = try getTargetDefines(triple);
     const target_ljarch = getTargetLjarch(target_defines);
     var dasm_arch = target_ljarch;
 
