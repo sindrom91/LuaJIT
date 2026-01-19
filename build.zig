@@ -23,6 +23,7 @@
 const std = @import("std");
 
 var alloc: std.mem.Allocator = undefined;
+var target_defines: []const u8 = undefined;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -32,6 +33,8 @@ pub fn build(b: *std.Build) !void {
     const arch = target.result.cpu.arch;
     const target_sys = target.result.os.tag;
     const host_sys = b.graph.host.result.os.tag;
+
+    populateTargetDefines(getTriple(target.result));
 
     var host_flags: std.ArrayList([]const u8) = .empty;
     if (host_sys != target_sys) {
@@ -57,49 +60,46 @@ pub fn build(b: *std.Build) !void {
         }
     }
 
-    const triple = getTriple(target.result);
-    defer alloc.free(triple);
-    const target_defines = try getTargetDefines(triple);
-    const target_ljarch = getTargetLjarch(target_defines);
+    const target_ljarch = getTargetLjarch();
     var dasm_arch = target_ljarch;
 
     // Set up DASM flags.
     var dasm_flags: std.ArrayList([]const u8) = .empty;
-    if (defineEquals(target_defines, "LJ_LE", "1")) {
+    if (defineEquals("LJ_LE", "1")) {
         addFlags(&dasm_flags, "-D", "ENDIAN_LE");
     } else {
         addFlags(&dasm_flags, "-D", "ENDIAN_BE");
     }
-    if (defineEquals(target_defines, "LJ_ARCH_BITS", "64"))
+    if (defineEquals("LJ_ARCH_BITS", "64"))
         addFlags(&dasm_flags, "-D", "P64");
-    if (defineEquals(target_defines, "LJ_HASJIT", "1"))
+    if (defineEquals("LJ_HASJIT", "1"))
         addFlags(&dasm_flags, "-D", "P64");
-    if (defineEquals(target_defines, "LJ_HASFFI", "1"))
+    if (defineEquals("LJ_HASFFI", "1"))
         addFlags(&dasm_flags, "-D", "FFI");
-    if (defineEquals(target_defines, "LJ_DUALNUM", "1"))
+    if (defineEquals("LJ_DUALNUM", "1"))
         addFlags(&dasm_flags, "-D", "DUALNUM");
-    if (defineEquals(target_defines, "LJ_ARCH_HASFPU", "1"))
+    if (defineEquals("LJ_ARCH_HASFPU", "1"))
         addFlags(&dasm_flags, "-D", "FPU");
-    if (!defineEquals(target_defines, "LJ_ABI_SOFTFP", "1"))
+    if (!defineEquals("LJ_ABI_SOFTFP", "1"))
         addFlags(&dasm_flags, "-D", "HFABI");
     if (target_sys == .windows)
         addFlags(&dasm_flags, "-D", "WIN");
-    if (defineEquals(target_defines, "LJ_NO_UNWIND", "1"))
+    if (defineEquals("LJ_NO_UNWIND", "1"))
         addFlags(&dasm_flags, "-D", "NO_UNWIND");
-    if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1"))
+    if (defineEquals("LJ_ABI_PAUTH", "1"))
         addFlags(&dasm_flags, "-D", "PAUTH");
-    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals(target_defines, "LJ_FR2", "1"))
+    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals("LJ_FR2", "1"))
         dasm_arch = "x86";
     if (std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios)
         addFlags(&dasm_flags, "-D", "IOS");
-    if (hasDefine(target_defines, "LJ_TARGET_MIPSR6"))
+    if (hasDefine("LJ_TARGET_MIPSR6"))
         addFlags(&dasm_flags, "-D", "MIPSR6");
     if (std.mem.eql(u8, target_ljarch, "ppc")) {
-        if (defineEquals(target_defines, "LJ_ARCH_SQRT", "1"))
+        if (defineEquals("LJ_ARCH_SQRT", "1"))
             addFlags(&dasm_flags, "-D", "SQRT");
-        if (defineEquals(target_defines, "LJ_ARCH_ROUND", "1"))
+        if (defineEquals("LJ_ARCH_ROUND", "1"))
             addFlags(&dasm_flags, "-D", "ROUND");
-        if (defineEquals(target_defines, "LJ_ARCH_PPC32ON64", "1"))
+        if (defineEquals("LJ_ARCH_PPC32ON64", "1"))
             addFlags(&dasm_flags, "-D", "GPR64");
         if (target_sys == .ps3) {
             addFlags(&dasm_flags, "-D", "PPE");
@@ -136,33 +136,33 @@ pub fn build(b: *std.Build) !void {
     gen_version.step.dependOn(&gen_relver.step);
 
     // Set up HOST flags.
-    if (hasDefine(target_defines, "LJ_TARGET_ARM64") and hasDefine(target_defines, "__AARCH64EB__")) {
+    if (hasDefine("LJ_TARGET_ARM64") and hasDefine("__AARCH64EB__")) {
         addFlag(&host_flags, "-D__AARCH64EB__=1");
-    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
-        if (defineEquals(target_defines, "LJ_LE", "1")) {
+    } else if (hasDefine("LJ_TARGET_PPC")) {
+        if (defineEquals("LJ_LE", "1")) {
             addFlag(&host_flags, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
         } else {
             addFlag(&host_flags, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
         }
-    } else if (hasDefine(target_defines, "LJ_TARGET_MIPS") and hasDefine(target_defines, "MIPSEL")) {
+    } else if (hasDefine("LJ_TARGET_MIPS") and hasDefine("MIPSEL")) {
         addFlag(&host_flags, "-D__MIPSEL__=1");
-    } else if (defineEquals(target_defines, "LJ_TARGET_PS3", "1")) {
+    } else if (defineEquals("LJ_TARGET_PS3", "1")) {
         addFlag(&host_flags, "-D__CELLOS_LV2__");
     }
-    if (defineEquals(target_defines, "LJ_ARCH_HASFPU", "1")) {
+    if (defineEquals("LJ_ARCH_HASFPU", "1")) {
         addFlag(&host_flags, "-DLJ_ARCH_HASFPU=1");
     } else {
         addFlag(&host_flags, "-DLJ_ARCH_HASFPU=0");
     }
-    if (defineEquals(target_defines, "LJ_ABI_SOFTFP", "1")) {
+    if (defineEquals("LJ_ABI_SOFTFP", "1")) {
         addFlag(&host_flags, "-DLJ_ABI_SOFTFP=1");
     } else {
         addFlag(&host_flags, "-DLJ_ABI_SOFTFP=0");
     }
-    if (defineEquals(target_defines, "LJ_NO_UNWIND", "1")) {
+    if (defineEquals("LJ_NO_UNWIND", "1")) {
         addFlag(&host_flags, "-DLUAJIT_NO_UNWIND");
     }
-    if (defineEquals(target_defines, "LJ_ABI_PAUTH", "1")) {
+    if (defineEquals("LJ_ABI_PAUTH", "1")) {
         addFlag(&host_flags, "-DLJ_ABI_PAUTH=1");
     }
     if (arch.isMIPS32()) {
@@ -449,10 +449,10 @@ fn getTriple(t: std.Target) []u8 {
     }) catch unreachable;
 }
 
-fn getTargetDefines(triple: []const u8) ![]u8 {
+fn populateTargetDefines(triple: []const u8) void {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(alloc);
-    try argv.appendSlice(alloc, &.{
+    argv.appendSlice(alloc, &.{
         "zig",
         "cc",
         "-E",
@@ -463,31 +463,29 @@ fn getTargetDefines(triple: []const u8) ![]u8 {
         "-D_LARGEFILE_SOURCE",
         "-U_FORTIFY_SOURCE",
         "src/lj_arch.h",
-    });
+    }) catch unreachable;
 
     var child = std.process.Child.init(argv.items, alloc);
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
-    try child.spawn();
+    child.spawn() catch unreachable;
 
-    const out = try child.stdout.?.readToEndAlloc(alloc, 10 * 1024 * 1024);
-    const err = try child.stderr.?.readToEndAlloc(alloc, 128 * 1024);
-    const term = try child.wait();
+    const out = child.stdout.?.readToEndAlloc(alloc, 10 * 1024 * 1024) catch unreachable;
+    const err = child.stderr.?.readToEndAlloc(alloc, 128 * 1024) catch unreachable;
+    const term = child.wait() catch unreachable;
 
     switch (term) {
         .Exited => |code| if (code != 0) {
-            std.debug.print("preprocess failed ({d}): {s}\n", .{ code, err });
-            return error.PreprocessFailed;
+            std.debug.panic("preprocess failed ({d}): {s}\n", .{ code, err });
         },
         else => {
-            std.debug.print("preprocess failed: {s}\n", .{err});
-            return error.PreprocessFailed;
+            std.debug.panic("preprocess failed: {s}\n", .{err});
         },
     }
-    return out;
+    target_defines = out;
 }
 
-fn hasDefine(target_defines: []const u8, name: []const u8) bool {
+fn hasDefine(name: []const u8) bool {
     var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, " \t\r");
@@ -498,7 +496,7 @@ fn hasDefine(target_defines: []const u8, name: []const u8) bool {
     return false;
 }
 
-fn defineEquals(target_defines: []const u8, name: []const u8, value: []const u8) bool {
+fn defineEquals(name: []const u8, value: []const u8) bool {
     var lines = std.mem.tokenizeScalar(u8, target_defines, '\n');
     while (lines.next()) |line_raw| {
         const line = std.mem.trim(u8, line_raw, " \t\r");
@@ -512,24 +510,24 @@ fn defineEquals(target_defines: []const u8, name: []const u8, value: []const u8)
     return false;
 }
 
-fn getTargetLjarch(target_defines: []const u8) []const u8 {
-    if (hasDefine(target_defines, "LJ_TARGET_X64")) {
+fn getTargetLjarch() []const u8 {
+    if (hasDefine("LJ_TARGET_X64")) {
         return "x64";
-    } else if (hasDefine(target_defines, "LJ_TARGET_X86")) {
+    } else if (hasDefine("LJ_TARGET_X86")) {
         return "x86";
-    } else if (hasDefine(target_defines, "LJ_TARGET_ARM")) {
+    } else if (hasDefine("LJ_TARGET_ARM")) {
         return "arm";
-    } else if (hasDefine(target_defines, "LJ_TARGET_ARM64")) {
+    } else if (hasDefine("LJ_TARGET_ARM64")) {
         return "arm64";
-    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
+    } else if (hasDefine("LJ_TARGET_PPC")) {
         return "ppc";
-    } else if (hasDefine(target_defines, "LJ_TARGET_MIPS")) {
-        if (hasDefine(target_defines, "LJ_TARGET_MIPS64")) {
+    } else if (hasDefine("LJ_TARGET_MIPS")) {
+        if (hasDefine("LJ_TARGET_MIPS64")) {
             return "mips64";
         } else {
             return "mips";
         }
-    } else if (hasDefine(target_defines, "LJ_TARGET_PPC")) {
+    } else if (hasDefine("LJ_TARGET_PPC")) {
         return "ppc";
     } else {
         @panic("Unsupported architecture.");
