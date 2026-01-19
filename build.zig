@@ -88,7 +88,7 @@ pub fn build(b: *std.Build) !void {
         addFlags(&dasm_flags, "-D", "NO_UNWIND");
     if (defineEquals("LJ_ABI_PAUTH", "1"))
         addFlags(&dasm_flags, "-D", "PAUTH");
-    if (std.mem.eql(u8, target_ljarch, "x64") and defineEquals("LJ_FR2", "1"))
+    if (std.mem.eql(u8, target_ljarch, "x64") and !defineEquals("LJ_FR2", "1"))
         dasm_arch = "x86";
     if (std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios)
         addFlags(&dasm_flags, "-D", "IOS");
