@@ -24,6 +24,9 @@ const std = @import("std");
 
 var alloc: std.mem.Allocator = undefined;
 var target_defines: []const u8 = undefined;
+var host_flags: std.ArrayList([]const u8) = .empty;
+var dasm_flags: std.ArrayList([]const u8) = .empty;
+var cflags: std.ArrayList([]const u8) = .empty;
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -36,26 +39,25 @@ pub fn build(b: *std.Build) !void {
 
     populateTargetDefines(getTriple(target.result));
 
-    var host_flags: std.ArrayList([]const u8) = .empty;
     if (host_sys != target_sys) {
         // TODO: This is probably not the same as what Makefile does.
         switch (target_sys) {
             .windows => {
-                addFlag(&host_flags, "-malign-double");
-                addFlag(&host_flags, "-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
+                addHostFlag("-malign-double");
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
             },
             .linux => {
-                addFlag(&host_flags, "-DLUAJIT_OS=LUAJIT_OS_LINUX");
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_LINUX");
             },
             .macos => {
-                addFlag(&host_flags, "-DLUAJIT_OS=LUAJIT_OS_OSX");
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OSX");
             },
             .ios => {
-                addFlag(&host_flags, "-DLUAJIT_OS=LUAJIT_OS_OSX");
-                addFlag(&host_flags, "-DTARGET_OS_IPHONE=1");
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OSX");
+                addHostFlag("-DTARGET_OS_IPHONE=1");
             },
             else => {
-                addFlag(&host_flags, "-DLUAJIT_OS=LUAJIT_OS_OTHER");
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OTHER");
             },
         }
     }
@@ -64,46 +66,45 @@ pub fn build(b: *std.Build) !void {
     var dasm_arch = target_ljarch;
 
     // Set up DASM flags.
-    var dasm_flags: std.ArrayList([]const u8) = .empty;
     if (defineEquals("LJ_LE", "1")) {
-        addFlags(&dasm_flags, "-D", "ENDIAN_LE");
+        addDasmFlag("-D", "ENDIAN_LE");
     } else {
-        addFlags(&dasm_flags, "-D", "ENDIAN_BE");
+        addDasmFlag("-D", "ENDIAN_BE");
     }
     if (defineEquals("LJ_ARCH_BITS", "64"))
-        addFlags(&dasm_flags, "-D", "P64");
+        addDasmFlag("-D", "P64");
     if (defineEquals("LJ_HASJIT", "1"))
-        addFlags(&dasm_flags, "-D", "P64");
+        addDasmFlag("-D", "P64");
     if (defineEquals("LJ_HASFFI", "1"))
-        addFlags(&dasm_flags, "-D", "FFI");
+        addDasmFlag("-D", "FFI");
     if (defineEquals("LJ_DUALNUM", "1"))
-        addFlags(&dasm_flags, "-D", "DUALNUM");
+        addDasmFlag("-D", "DUALNUM");
     if (defineEquals("LJ_ARCH_HASFPU", "1"))
-        addFlags(&dasm_flags, "-D", "FPU");
+        addDasmFlag("-D", "FPU");
     if (!defineEquals("LJ_ABI_SOFTFP", "1"))
-        addFlags(&dasm_flags, "-D", "HFABI");
+        addDasmFlag("-D", "HFABI");
     if (target_sys == .windows)
-        addFlags(&dasm_flags, "-D", "WIN");
+        addDasmFlag("-D", "WIN");
     if (defineEquals("LJ_NO_UNWIND", "1"))
-        addFlags(&dasm_flags, "-D", "NO_UNWIND");
+        addDasmFlag("-D", "NO_UNWIND");
     if (defineEquals("LJ_ABI_PAUTH", "1"))
-        addFlags(&dasm_flags, "-D", "PAUTH");
+        addDasmFlag("-D", "PAUTH");
     if (std.mem.eql(u8, target_ljarch, "x64") and !defineEquals("LJ_FR2", "1"))
         dasm_arch = "x86";
     if (std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios)
-        addFlags(&dasm_flags, "-D", "IOS");
+        addDasmFlag("-D", "IOS");
     if (hasDefine("LJ_TARGET_MIPSR6"))
-        addFlags(&dasm_flags, "-D", "MIPSR6");
+        addDasmFlag("-D", "MIPSR6");
     if (std.mem.eql(u8, target_ljarch, "ppc")) {
         if (defineEquals("LJ_ARCH_SQRT", "1"))
-            addFlags(&dasm_flags, "-D", "SQRT");
+            addDasmFlag("-D", "SQRT");
         if (defineEquals("LJ_ARCH_ROUND", "1"))
-            addFlags(&dasm_flags, "-D", "ROUND");
+            addDasmFlag("-D", "ROUND");
         if (defineEquals("LJ_ARCH_PPC32ON64", "1"))
-            addFlags(&dasm_flags, "-D", "GPR64");
+            addDasmFlag("-D", "GPR64");
         if (target_sys == .ps3) {
-            addFlags(&dasm_flags, "-D", "PPE");
-            addFlags(&dasm_flags, "-D", "TOC");
+            addDasmFlag("-D", "PPE");
+            addDasmFlag("-D", "TOC");
         }
     }
 
@@ -137,37 +138,37 @@ pub fn build(b: *std.Build) !void {
 
     // Set up HOST flags.
     if (hasDefine("LJ_TARGET_ARM64") and hasDefine("__AARCH64EB__")) {
-        addFlag(&host_flags, "-D__AARCH64EB__=1");
+        addHostFlag("-D__AARCH64EB__=1");
     } else if (hasDefine("LJ_TARGET_PPC")) {
         if (defineEquals("LJ_LE", "1")) {
-            addFlag(&host_flags, "-DLJ_ARCH_ENDIAN=LUAJIT_LE");
+            addHostFlag("-DLJ_ARCH_ENDIAN=LUAJIT_LE");
         } else {
-            addFlag(&host_flags, "-DLJ_ARCH_ENDIAN=LUAJIT_BE");
+            addHostFlag("-DLJ_ARCH_ENDIAN=LUAJIT_BE");
         }
     } else if (hasDefine("LJ_TARGET_MIPS") and hasDefine("MIPSEL")) {
-        addFlag(&host_flags, "-D__MIPSEL__=1");
+        addHostFlag("-D__MIPSEL__=1");
     } else if (defineEquals("LJ_TARGET_PS3", "1")) {
-        addFlag(&host_flags, "-D__CELLOS_LV2__");
+        addHostFlag("-D__CELLOS_LV2__");
     }
     if (defineEquals("LJ_ARCH_HASFPU", "1")) {
-        addFlag(&host_flags, "-DLJ_ARCH_HASFPU=1");
+        addHostFlag("-DLJ_ARCH_HASFPU=1");
     } else {
-        addFlag(&host_flags, "-DLJ_ARCH_HASFPU=0");
+        addHostFlag("-DLJ_ARCH_HASFPU=0");
     }
     if (defineEquals("LJ_ABI_SOFTFP", "1")) {
-        addFlag(&host_flags, "-DLJ_ABI_SOFTFP=1");
+        addHostFlag("-DLJ_ABI_SOFTFP=1");
     } else {
-        addFlag(&host_flags, "-DLJ_ABI_SOFTFP=0");
+        addHostFlag("-DLJ_ABI_SOFTFP=0");
     }
     if (defineEquals("LJ_NO_UNWIND", "1")) {
-        addFlag(&host_flags, "-DLUAJIT_NO_UNWIND");
+        addHostFlag("-DLUAJIT_NO_UNWIND");
     }
     if (defineEquals("LJ_ABI_PAUTH", "1")) {
-        addFlag(&host_flags, "-DLJ_ABI_PAUTH=1");
+        addHostFlag("-DLJ_ABI_PAUTH=1");
     }
     if (arch.isMIPS32()) {
         // WORKAROUND: LLVM assembler cannot handle writable EH frames.
-        addFlag(&host_flags, "-DLJ_NO_UNWIND=1");
+        addHostFlag("-DLJ_NO_UNWIND=1");
     }
 
     const buildvm = b.addExecutable(.{
@@ -195,8 +196,8 @@ pub fn build(b: *std.Build) !void {
         "src/host/buildvm_fold.c",
     };
 
-    addFlag(&host_flags, "-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
-    addFlag(&host_flags, join2("-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch));
+    addHostFlag("-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
+    addHostFlag(join2("-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch));
 
     for (buildvm_sources) |f| buildvm.root_module.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
     buildvm.root_module.addIncludePath(b.path("src"));
@@ -256,27 +257,22 @@ pub fn build(b: *std.Build) !void {
     gen_ljvm.addArgs(&.{ "-m", ljvm_mode, "-o" });
     const ljvm = gen_ljvm.addOutputFileArg(if (target_sys == .windows) "generated/lj_vm.obj" else "generated/lj_vm.S");
 
-    const cflags = switch (arch) {
-        .arm => &[_][]const u8{
-            "-DLUAJIT_UNWIND_EXTERNAL",
-            "-D__floatdidf=__aeabi_l2d",
-            "-D__floatundidf=__aeabi_ul2d",
-            "-D__floatdisf=__aeabi_l2f",
-            "-D__floatundisf=__aeabi_ul2f",
-            "-D__fixdfdi=__aeabi_d2lz",
-            "-D__fixunsdfdi=__aeabi_d2ulz",
-            "-D__fixsfdi=__aeabi_f2lz",
-            "-D__fixunssfdi=__aeabi_f2ulz",
-        },
-        .mips, .mipsel, .mips64, .mips64el => &[_][]const u8{
-            "-DLUAJIT_UNWIND_EXTERNAL",
-            // WORKAROUND: __clear_cache is not declared in any header.
-            "-Wno-error=implicit-function-declaration",
-        },
-        else => &[_][]const u8{
-            "-DLUAJIT_UNWIND_EXTERNAL",
-        },
-    };
+    addCFlag("-DLUAJIT_UNWIND_EXTERNAL");
+    if (arch == .arm) {
+        // WORKAROUND: Zig compiler runtime doesn't declare __float* and __fix* builtins.
+        addCFlag("-D__floatdidf=__aeabi_l2d");
+        addCFlag("-D__floatundidf=__aeabi_ul2d");
+        addCFlag("-D__floatdisf=__aeabi_l2f");
+        addCFlag("-D__floatundisf=__aeabi_ul2f");
+        addCFlag("-D__fixdfdi=__aeabi_d2lz");
+        addCFlag("-D__fixunsdfdi=__aeabi_d2ulz");
+        addCFlag("-D__fixsfdi=__aeabi_f2lz");
+        addCFlag("-D__fixunssfdi=__aeabi_f2ulz");
+    }
+    if (arch.isMIPS()) {
+        // WORKAROUND: __clear_cache is not declared in any header.
+        addCFlag("-Wno-error=implicit-function-declaration");
+    }
 
     const libluajit = b.addLibrary(.{
         .name = "libluajit",
@@ -357,7 +353,7 @@ pub fn build(b: *std.Build) !void {
         "src/lib_ffi.c",
         "src/lib_init.c",
     };
-    for (libluajit_sources) |f| libluajit.root_module.addCSourceFile(.{ .file = b.path(f), .flags = cflags });
+    for (libluajit_sources) |f| libluajit.root_module.addCSourceFile(.{ .file = b.path(f), .flags = cflags.items });
     if (target_sys == .windows) {
         libluajit.root_module.addObjectFile(ljvm);
     } else {
@@ -406,7 +402,7 @@ pub fn build(b: *std.Build) !void {
             .link_libc = true,
         }),
     });
-    luajit.root_module.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags });
+    luajit.root_module.addCSourceFile(.{ .file = b.path("src/luajit.c"), .flags = cflags.items });
     luajit.root_module.addIncludePath(b.path("src"));
     luajit.root_module.addIncludePath(luajith.dirname());
     luajit.root_module.linkLibrary(libluajit);
@@ -419,13 +415,17 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(luajit);
 }
 
-fn addFlag(flags: *std.ArrayList([]const u8), flag: []const u8) void {
-    flags.append(alloc, flag) catch unreachable;
+fn addCFlag(flag: []const u8) void {
+    cflags.append(alloc, flag) catch unreachable;
 }
 
-fn addFlags(flags: *std.ArrayList([]const u8), flag1: []const u8, flag2: []const u8) void {
-    flags.append(alloc, flag1) catch unreachable;
-    flags.append(alloc, flag2) catch unreachable;
+fn addDasmFlag(flag1: []const u8, flag2: []const u8) void {
+    dasm_flags.append(alloc, flag1) catch unreachable;
+    dasm_flags.append(alloc, flag2) catch unreachable;
+}
+
+fn addHostFlag(flag: []const u8) void {
+    host_flags.append(alloc, flag) catch unreachable;
 }
 
 fn join2(s1: []const u8, s2: []const u8) []const u8 {
