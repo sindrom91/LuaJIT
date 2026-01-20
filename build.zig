@@ -196,7 +196,9 @@ pub fn build(b: *std.Build) !void {
         "src/host/buildvm_fold.c",
     };
 
-    addHostFlag("-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
+    if (target_sys == .windows)
+        addHostFlag("-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
+
     addHostFlag(join2("-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch));
 
     for (buildvm_sources) |f| buildvm.root_module.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
