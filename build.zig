@@ -39,74 +39,30 @@ pub fn build(b: *std.Build) !void {
 
     populateTargetDefines(getTriple(target.result));
 
-    if (host_sys != target_sys) {
-        // TODO: This is probably not the same as what Makefile does.
-        switch (target_sys) {
-            .windows => {
-                addHostFlag("-malign-double");
-                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
-            },
-            .linux => {
-                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_LINUX");
-            },
-            .macos => {
-                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OSX");
-            },
-            .ios => {
-                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OSX");
-                addHostFlag("-DTARGET_OS_IPHONE=1");
-            },
-            else => {
-                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OTHER");
-            },
-        }
-    }
-
     const target_ljarch = getTargetLjarch();
-    var dasm_arch = target_ljarch;
+    const dasm_arch = if (std.mem.eql(u8, target_ljarch, "x64") and !defineEquals("LJ_FR2", "1")) "x86" else target_ljarch;
 
     // Set up DASM flags.
-    if (defineEquals("LJ_LE", "1")) {
-        addDasmFlag("-D", "ENDIAN_LE");
-    } else {
-        addDasmFlag("-D", "ENDIAN_BE");
-    }
-    if (defineEquals("LJ_ARCH_BITS", "64"))
-        addDasmFlag("-D", "P64");
-    if (defineEquals("LJ_HASJIT", "1"))
-        addDasmFlag("-D", "P64");
-    if (defineEquals("LJ_HASFFI", "1"))
-        addDasmFlag("-D", "FFI");
-    if (defineEquals("LJ_DUALNUM", "1"))
-        addDasmFlag("-D", "DUALNUM");
-    if (defineEquals("LJ_ARCH_HASFPU", "1"))
-        addDasmFlag("-D", "FPU");
-    if (!defineEquals("LJ_ABI_SOFTFP", "1"))
-        addDasmFlag("-D", "HFABI");
-    if (target_sys == .windows)
-        addDasmFlag("-D", "WIN");
-    if (defineEquals("LJ_NO_UNWIND", "1"))
-        addDasmFlag("-D", "NO_UNWIND");
-    if (defineEquals("LJ_ABI_PAUTH", "1"))
-        addDasmFlag("-D", "PAUTH");
-    if (std.mem.eql(u8, target_ljarch, "x64") and !defineEquals("LJ_FR2", "1"))
-        dasm_arch = "x86";
-    if (std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios)
-        addDasmFlag("-D", "IOS");
-    if (hasDefine("LJ_TARGET_MIPSR6"))
-        addDasmFlag("-D", "MIPSR6");
-    if (std.mem.eql(u8, target_ljarch, "ppc")) {
-        if (defineEquals("LJ_ARCH_SQRT", "1"))
-            addDasmFlag("-D", "SQRT");
-        if (defineEquals("LJ_ARCH_ROUND", "1"))
-            addDasmFlag("-D", "ROUND");
-        if (defineEquals("LJ_ARCH_PPC32ON64", "1"))
-            addDasmFlag("-D", "GPR64");
-        if (target_sys == .ps3) {
-            addDasmFlag("-D", "PPE");
-            addDasmFlag("-D", "TOC");
-        }
-    }
+    addDasmFlagC("-D", "ENDIAN_LE", defineEquals("LJ_LE", "1"));
+    addDasmFlagC("-D", "ENDIAN_BE", defineEquals("LJ_BE", "1"));
+    addDasmFlagC("-D", "P64", defineEquals("LJ_ARCH_BITS", "64"));
+    addDasmFlagC("-D", "JIT", defineEquals("LJ_HASJIT", "1"));
+    addDasmFlagC("-D", "FFI", defineEquals("LJ_HASFFI", "1"));
+    addDasmFlagC("-D", "DUALNUM", defineEquals("LJ_DUALNUM", "1"));
+    addDasmFlagC("-D", "FPU", defineEquals("LJ_ARCH_HASFPU", "1"));
+    addDasmFlagC("-D", "HFABI", !defineEquals("LJ_ABI_SOFTFP", "1"));
+    addDasmFlagC("-D", "WIN", target_sys == .windows);
+    addDasmFlagC("-D", "NO_UNWIND", defineEquals("LJ_NO_UNWIND", "1"));
+    addDasmFlagC("-D", "PAUTH", defineEquals("LJ_ABI_PAUTH", "1"));
+    addDasmFlagC("-D", "IOS", std.mem.eql(u8, target_ljarch, "arm") and target_sys == .ios);
+    addDasmFlagC("-D", "MIPSR6", hasDefine("LJ_TARGET_MIPSR6"));
+
+    const is_ppc = std.mem.eql(u8, target_ljarch, "ppc");
+    addDasmFlagC("-D", "SQRT", is_ppc and defineEquals("LJ_ARCH_SQRT", "1"));
+    addDasmFlagC("-D", "ROUND", is_ppc and defineEquals("LJ_ARCH_ROUND", "1"));
+    addDasmFlagC("-D", "GPR64", is_ppc and defineEquals("LJ_ARCH_PPC32ON64", "1"));
+    addDasmFlagC("-D", "PPE", is_ppc and target_sys == .ps3);
+    addDasmFlagC("-D", "TOC", is_ppc and target_sys == .ps3);
 
     const minilua = b.addExecutable(.{
         .name = "minilua",
@@ -137,38 +93,46 @@ pub fn build(b: *std.Build) !void {
     gen_version.step.dependOn(&gen_relver.step);
 
     // Set up HOST flags.
-    if (hasDefine("LJ_TARGET_ARM64") and hasDefine("__AARCH64EB__")) {
-        addHostFlag("-D__AARCH64EB__=1");
-    } else if (hasDefine("LJ_TARGET_PPC")) {
-        if (defineEquals("LJ_LE", "1")) {
-            addHostFlag("-DLJ_ARCH_ENDIAN=LUAJIT_LE");
-        } else {
-            addHostFlag("-DLJ_ARCH_ENDIAN=LUAJIT_BE");
+    addHostFlagC("-D__AARCH64EB__=1", hasDefine("LJ_TARGET_ARM64") and hasDefine("__AARCH64EB__"));
+    addHostFlagC("-DLJ_ARCH_ENDIAN=LUAJIT_LE", hasDefine("LJ_TARGET_PPC") and defineEquals("LJ_LE", "1"));
+    addHostFlagC("-DLJ_ARCH_ENDIAN=LUAJIT_BE", hasDefine("LJ_TARGET_PPC") and defineEquals("LJ_BE", "1"));
+    addHostFlagC("-D__MIPSEL__=1", hasDefine("LJ_TARGET_MIPS") and hasDefine("MIPSEL"));
+    addHostFlagC("-D__CELLOS_LV2__", defineEquals("LJ_TARGET_PS3", "1"));
+    addHostFlagC("-DLJ_ARCH_HASFPU=1", defineEquals("LJ_ARCH_HASFPU", "1"));
+    addHostFlagC("-DLJ_ARCH_HASFPU=0", !defineEquals("LJ_ARCH_HASFPU", "1"));
+    addHostFlagC("-DLJ_ABI_SOFTFP=1", defineEquals("LJ_ABI_SOFTFP", "1"));
+    addHostFlagC("-DLJ_ABI_SOFTFP=0", !defineEquals("LJ_ABI_SOFTFP", "1"));
+    addHostFlagC("-DLUAJIT_NO_UNWIND", defineEquals("LJ_NO_UNWIND", "1"));
+    addHostFlagC("-DLJ_ABI_PAUTH=1", defineEquals("LJ_ABI_PAUTH", "1"));
+    addHostFlag(join2("-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch));
+
+    // WORKAROUND: LLVM assembler cannot handle writable EH frames.
+    addHostFlagC("-DLJ_NO_UNWIND=1", arch.isMIPS32());
+
+    // WORKAROUND: Windows paths in #line cause errors.
+    addHostFlagC("-Wno-unknown-escape-sequence", target_sys == .windows);
+
+    if (host_sys != target_sys) {
+        // TODO: This is probably not the same as what Makefile does.
+        switch (target_sys) {
+            .windows => {
+                addHostFlag("-malign-double");
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_WINDOWS");
+            },
+            .linux => {
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_LINUX");
+            },
+            .macos => {
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OSX");
+            },
+            .ios => {
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OSX");
+                addHostFlag("-DTARGET_OS_IPHONE=1");
+            },
+            else => {
+                addHostFlag("-DLUAJIT_OS=LUAJIT_OS_OTHER");
+            },
         }
-    } else if (hasDefine("LJ_TARGET_MIPS") and hasDefine("MIPSEL")) {
-        addHostFlag("-D__MIPSEL__=1");
-    } else if (defineEquals("LJ_TARGET_PS3", "1")) {
-        addHostFlag("-D__CELLOS_LV2__");
-    }
-    if (defineEquals("LJ_ARCH_HASFPU", "1")) {
-        addHostFlag("-DLJ_ARCH_HASFPU=1");
-    } else {
-        addHostFlag("-DLJ_ARCH_HASFPU=0");
-    }
-    if (defineEquals("LJ_ABI_SOFTFP", "1")) {
-        addHostFlag("-DLJ_ABI_SOFTFP=1");
-    } else {
-        addHostFlag("-DLJ_ABI_SOFTFP=0");
-    }
-    if (defineEquals("LJ_NO_UNWIND", "1")) {
-        addHostFlag("-DLUAJIT_NO_UNWIND");
-    }
-    if (defineEquals("LJ_ABI_PAUTH", "1")) {
-        addHostFlag("-DLJ_ABI_PAUTH=1");
-    }
-    if (arch.isMIPS32()) {
-        // WORKAROUND: LLVM assembler cannot handle writable EH frames.
-        addHostFlag("-DLJ_NO_UNWIND=1");
     }
 
     const buildvm = b.addExecutable(.{
@@ -195,11 +159,6 @@ pub fn build(b: *std.Build) !void {
         "src/host/buildvm_lib.c",
         "src/host/buildvm_fold.c",
     };
-
-    if (target_sys == .windows)
-        addHostFlag("-Wno-unknown-escape-sequence"); // TODO: Windows paths in #line cause errors.
-
-    addHostFlag(join2("-DLUAJIT_TARGET=LUAJIT_ARCH_", target_ljarch));
 
     for (buildvm_sources) |f| buildvm.root_module.addCSourceFile(.{ .file = b.path(f), .flags = host_flags.items });
     buildvm.root_module.addIncludePath(b.path("src"));
@@ -426,8 +385,20 @@ fn addDasmFlag(flag1: []const u8, flag2: []const u8) void {
     dasm_flags.append(alloc, flag2) catch unreachable;
 }
 
+fn addDasmFlagC(flag1: []const u8, flag2: []const u8, cond: bool) void {
+    if (cond) {
+        dasm_flags.append(alloc, flag1) catch unreachable;
+        dasm_flags.append(alloc, flag2) catch unreachable;
+    }
+}
+
 fn addHostFlag(flag: []const u8) void {
     host_flags.append(alloc, flag) catch unreachable;
+}
+
+fn addHostFlagC(flag: []const u8, cond: bool) void {
+    if (cond)
+        host_flags.append(alloc, flag) catch unreachable;
 }
 
 fn join2(s1: []const u8, s2: []const u8) []const u8 {
