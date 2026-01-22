@@ -331,11 +331,11 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
         });
 
-        const zig_obj = b.addObject(.{
+        const cdcmp_obj = b.addObject(.{
             .name = "zig_part",
             .root_module = cdcmp_mod,
         });
-        libluajit.addObject(zig_obj);
+        libluajit.addObject(cdcmp_obj);
     }
 
     libluajit.root_module.addIncludePath(b.path("src"));
@@ -378,11 +378,6 @@ pub fn build(b: *std.Build) !void {
 
 fn addCFlag(flag: []const u8) void {
     cflags.append(alloc, flag) catch unreachable;
-}
-
-fn addDasmFlag(flag1: []const u8, flag2: []const u8) void {
-    dasm_flags.append(alloc, flag1) catch unreachable;
-    dasm_flags.append(alloc, flag2) catch unreachable;
 }
 
 fn addDasmFlagC(flag1: []const u8, flag2: []const u8, cond: bool) void {
@@ -511,7 +506,7 @@ fn getTargetLjarch() []const u8 {
 const cdcmp =
     \\ const std = @import("std");
     \\
-    \\ pub const LE = enum(i32) {
+    \\ const LE = enum(i32) {
     \\     Less = -1,
     \\     Equal = 0,
     \\     Greater = 1,
@@ -519,7 +514,7 @@ const cdcmp =
     \\     const Unordered: LE = .Greater;
     \\ };
     \\
-    \\ pub inline fn cmpf2(comptime T: type, comptime RT: type, a: T, b: T) RT {
+    \\ fn cmpf2(comptime T: type, comptime RT: type, a: T, b: T) RT {
     \\     const bits = @typeInfo(T).float.bits;
     \\     const srep_t = std.meta.Int(.signed, bits);
     \\     const rep_t = std.meta.Int(.unsigned, bits);
